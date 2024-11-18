@@ -7,11 +7,13 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
+import plotly.express as px
+import awkward as ak
 
 
 
 def import_data(file):
-    File = uproot.open(os.getcwd()+"\data\\"+file)
+    File = uproot.open(file)
     Tree = File["tree_DMC"]
     DF = Tree.arrays(library="pd")
     return DF
@@ -107,3 +109,40 @@ def generate_clusters(DFs):
         DF = DF.assign(EM3_Clus=cl3)
 
     return DFs
+
+def visualise_ROI(dataframe_entry):
+    entry = ak.to_numpy(dataframe_entry)
+
+    map0 = [0,11,22,33,44,55,66,77,88]    
+    map1 = [1,2,3,4,12,13,14,15,23,24,25,26,34,35,36,37,45,46,47,48,56,57,58,59,67,68,69,70,78,79,80,81,89,90,91,92]
+    map2 = [5,6,7,8,16,17,18,19,27,28,29,30,38,39,40,41,49,50,51,52,60,61,62,63,71,72,73,74,82,83,84,85,93,94,95,96]    
+    map3 = [9,20,31,42,53,64,75,86,97]    
+    mapH = [10,21,32,43,54,65,76,87,98]    
+
+    cell_values = pd.DataFrame(columns=['eta', 'phi', 'r','value'])
+
+
+    for cell_number, value in enumerate(entry):
+
+        if cell_number in map0:
+            r=0
+            eta = 4* (map0.index(cell_number) %3)+ 1.5
+        elif cell_number in map1:
+            r=1
+            eta = map1.index(cell_number) %12
+        elif cell_number in map2:
+            r=2
+            eta = map2.index(cell_number) %12
+        elif cell_number in map3:
+            r=3
+            eta = 4* (map3.index(cell_number) %3) + 1.5
+        elif cell_number in mapH:
+            r=4
+            eta = 4 * (mapH.index(cell_number) %3) + 1.5
+
+        phi = cell_number // 33
+
+        cell_values.loc[len(cell_values.index)] = [eta, phi, r,value] 
+
+    fig = px.scatter_3d(cell_values,x="eta",y="phi",z="r",color="value")
+    fig.show()
