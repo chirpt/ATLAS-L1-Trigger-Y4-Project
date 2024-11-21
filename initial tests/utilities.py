@@ -32,7 +32,7 @@ def visualise_ROI(dataframe_entry,isdataframe=True):
     map3 = [9,20,31,42,53,64,75,86,97]    
     mapH = [10,21,32,43,54,65,76,87,98]    
 
-    cell_values = pd.DataFrame(columns=['eta', 'phi', 'r','value'])
+    cell_values = pd.DataFrame(columns=['eta', 'phi', 'r', 'value'])
 
 
     for cell_number, value in enumerate(entry):
@@ -57,12 +57,12 @@ def visualise_ROI(dataframe_entry,isdataframe=True):
 
         cell_values.loc[len(cell_values.index)] = [eta, phi, r,value] 
 
-    fig = px.scatter_3d(cell_values,x="eta",y="phi",z="r",color="value")
+    fig = px.scatter_3d(cell_values, x="eta", y="phi", z="r", color="value")
     fig.show()
 
-def prepare_data(accept_data_filename="l1calo_hist_EGZ_extended.root",reject_data_filename="l1calo_hist_ZMUMU_extended.root"):
+def prepare_data(accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root"):
     # 1s assigned to data in EGZ (accept), 0s assigned to data om ZMUMU (reject)
-    DFs = import_data_files([accept_data_filename,reject_data_filename])
+    DFs = import_data_files([accept_data_filename, reject_data_filename])
 
     accepted_numpy = ak.to_numpy(DFs[0]['SuperCell_ET'])
     rejected_numpy = ak.to_numpy(DFs[1]['SuperCell_ET'])
@@ -70,8 +70,8 @@ def prepare_data(accept_data_filename="l1calo_hist_EGZ_extended.root",reject_dat
     accepted_labels = np.ones(accepted_numpy.shape[0])
     rejected_labels = np.zeros(rejected_numpy.shape[0])
 
-    data = np.concatenate((accepted_numpy,rejected_numpy),axis=0)
-    labels = np.concatenate((accepted_labels,rejected_labels),axis=0)
+    data = np.concatenate((accepted_numpy, rejected_numpy), axis=0)
+    labels = np.concatenate((accepted_labels, rejected_labels), axis=0)
 
     np.random.seed(42)
     np.random.shuffle(data)
@@ -90,12 +90,10 @@ def plot_2D_TSNE(embedded_data,colour_var,title):
     plt.ylabel("t-SNE Dimension 2")
     plt.show()
 
-
 def plot_3D_TSNE(embedded_data, colour_var,point_size=2):
-    fig = px.scatter_3d(x=embedded_data[:, 0], y=embedded_data[:, 1],z=embedded_data[:, 2],color=colour_var)
+    fig = px.scatter_3d(x=embedded_data[:, 0], y=embedded_data[:, 1], z=embedded_data[:, 2], color=colour_var)
     fig.update_traces(marker=dict(line=dict(width=0),size=np.ones(colour_var.shape)*point_size))
     fig.show()
-
 
 def evaluate_sklearn_model(y_test,y_pred):
     print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
