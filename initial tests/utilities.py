@@ -1,3 +1,6 @@
+import os
+import pickle
+import uproot
 import pandas as pd
 import numpy as np
 import uproot
@@ -5,8 +8,7 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import plotly.express as px
 import awkward as ak
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error
-
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc
 
 
 
@@ -22,7 +24,7 @@ def import_data_files(data_filenames):
         data_files.append(import_data(data_filename))
     return data_files
 
-def visualise_ROI(dataframe_entry,isdataframe=True):
+def visualise_ROI(dataframe_entry, isdataframe=True):
     if isdataframe:
         entry = ak.to_numpy(dataframe_entry)
 
@@ -60,8 +62,21 @@ def visualise_ROI(dataframe_entry,isdataframe=True):
     fig = px.scatter_3d(cell_values, x="eta", y="phi", z="r", color="value")
     fig.show()
 
-def prepare_data(accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root"):
-    # 1s assigned to data in EGZ (accept), 0s assigned to data om ZMUMU (reject)
+
+
+def prepare_data(accept_data_filename="l1calo_hist_EGZ_extended.root", 
+                 reject_data_filename="l1calo_hist_ZMUMU_extended.root", 
+                 save_path="prepared_data.npz"):
+    accept_data_filename = os.path.join(os.path.pardir, "data", "l1calo_hist_EGZ_extended.root")
+    reject_data_filename = os.path.join(os.path.pardir, "data", "l1calo_hist_ZMUMU_extended.root")
+    save_path = os.path.join(os.path.pardir, "data", "prepared_data.npz")
+
+    if os.path.exists(save_path):
+        print(f"Loading prepared data from {save_path}")
+        data = np.load(save_path)
+        return data['X_train'], data['X_test'], data['y_train'], data['y_test']
+
+    print("Preparing data...")
     DFs = import_data_files([accept_data_filename, reject_data_filename])
 
     accepted_numpy = ak.to_numpy(DFs[0]['SuperCell_ET'])
@@ -79,9 +94,14 @@ def prepare_data(accept_data_filename="l1calo_hist_EGZ_extended.root", reject_da
     np.random.shuffle(labels)
 
     X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=0.2, random_state=42)
+
+    # Save the processed data to disk
+    print(f"Saving prepared data to {save_path}")
+    np.savez(save_path, X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test)
+
     return X_train, X_test, y_train, y_test
 
-def plot_2D_TSNE(embedded_data,colour_var,title):
+def plot_2D_TSNE(embedded_data, colour_var,title):
     plt.figure(figsize=(10, 6))
     plt.scatter(embedded_data[:, 0], embedded_data[:, 1], c=colour_var, cmap='viridis', s=5)
     plt.colorbar(label="1 - accepted, 0 - rejected")
@@ -95,8 +115,24 @@ def plot_3D_TSNE(embedded_data, colour_var,point_size=2):
     fig.update_traces(marker=dict(line=dict(width=0),size=np.ones(colour_var.shape)*point_size))
     fig.show()
 
-def evaluate_sklearn_model(y_test,y_pred):
+def evaluate_sklearn_model(y_test, y_pred):
     print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
     print("Classification Report:\n",classification_report(y_test, y_pred))
     print("Confusion Matrix:\n",confusion_matrix(y_test, y_pred))
     print("Mean Squared Error:\n",mean_squared_error(y_test, y_pred))
+    
+def compute_roc(model, X_test, y_test):
+    y_scores = model.decision_function(X_test)
+    fpr, tpr, _ = roc_curve(y_test, y_scores)
+    roc_auc = auc(fpr, tpr)
+    return fpr, tpr, roc_auc
+
+def plot_roc(fpr, tpr, roc_auc):
+    plt.figure()
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f"ROC curve (AUC = {roc_auc:.4f})")
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic')
+    plt.legend(loc="lower right")
+    plt.show()
