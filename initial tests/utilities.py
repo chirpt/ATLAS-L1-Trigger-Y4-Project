@@ -64,43 +64,44 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
 
 
 
-def prepare_data(accept_data_filename="l1calo_hist_EGZ_extended.root", 
+def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", 
                  reject_data_filename="l1calo_hist_ZMUMU_extended.root", 
                  save_path="prepared_data.npz"):
     accept_data_filename = os.path.join(os.path.pardir, "data", "l1calo_hist_EGZ_extended.root")
     reject_data_filename = os.path.join(os.path.pardir, "data", "l1calo_hist_ZMUMU_extended.root")
     save_path = os.path.join(os.path.pardir, "data", "prepared_data.npz")
 
-    if os.path.exists(save_path):
-        print(f"Loading prepared data from {save_path}")
-        data = np.load(save_path)
-        return data['X_train'], data['X_test'], data['y_train'], data['y_test']
+    if not os.path.exists(save_path):
+        print("Preparing data...")
+        DFs = import_data_files([accept_data_filename, reject_data_filename])
 
-    print("Preparing data...")
-    DFs = import_data_files([accept_data_filename, reject_data_filename])
+        accepted_numpy = ak.to_numpy(DFs[0]['SuperCell_ET'])
+        rejected_numpy = ak.to_numpy(DFs[1]['SuperCell_ET'])
 
-    accepted_numpy = ak.to_numpy(DFs[0]['SuperCell_ET'])
-    rejected_numpy = ak.to_numpy(DFs[1]['SuperCell_ET'])
+        accepted_labels = np.ones(accepted_numpy.shape[0])
+        rejected_labels = np.zeros(rejected_numpy.shape[0])
 
-    accepted_labels = np.ones(accepted_numpy.shape[0])
-    rejected_labels = np.zeros(rejected_numpy.shape[0])
+        data = np.concatenate((accepted_numpy, rejected_numpy), axis=0)
+        labels = np.concatenate((accepted_labels, rejected_labels), axis=0)
 
-    data = np.concatenate((accepted_numpy, rejected_numpy), axis=0)
-    labels = np.concatenate((accepted_labels, rejected_labels), axis=0)
-
-    np.random.seed(42)
-    np.random.shuffle(data)
-    np.random.seed(42)
-    np.random.shuffle(labels)
-
-    X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=0.2, random_state=42)
-
-    print(f"Saving prepared data to {save_path}")
-    np.savez(save_path, X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test)
+        np.random.seed(42)
+        np.random.shuffle(data)
+        np.random.seed(42)
+        np.random.shuffle(labels)
+        
+        print(f"Saving prepared data to {save_path}")
+        np.savez(save_path, data=data, labels=labels)
+    
+    else:
+            print(f"Loading prepared data from {save_path}")
+        
+    data = np.load(save_path)
+        
+    X_train, X_test, y_train, y_test = train_test_split(data['data'], data['labels'], test_size=test_size, random_state=42)
 
     return X_train, X_test, y_train, y_test
 
-def plot_2D_TSNE(embedded_data, colour_var,title):
+def plot_2D_TSNE(embedded_data, colour_var, title):
     plt.figure(figsize=(10, 6))
     plt.scatter(embedded_data[:, 0], embedded_data[:, 1], c=colour_var, cmap='viridis', s=5)
     plt.colorbar(label="1 - accepted, 0 - rejected")
