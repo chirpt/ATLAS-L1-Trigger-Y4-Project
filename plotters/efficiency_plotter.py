@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 def main():
     file = "l1calo_hist_EGZ_extended.root"
+    file = os.path.join("data", file)
     DF = import_data(file)
     efficiency_data, PT_bins = extract_efficiency(DF)
     plot(efficiency_data, PT_bins)

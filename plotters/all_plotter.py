@@ -1,4 +1,5 @@
 import os
+import sys
 import math
 import pandas as pd
 import numpy as np
@@ -7,7 +8,14 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
+import sys
+import os
+
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(parent_dir, 'initial tests'))
+
 from utilities import *
+
 
 """
 Dataframe columns
@@ -16,7 +24,8 @@ Dataframe columns
 def main():
     Files= ["l1calo_hist_ZMUMU_extended.root","l1calo_hist_EGZ_extended.root","l1calo_hist_EGZ_extended_new.root"] # "extended" includes isolation vars and extended_new trigger decision
     for filestring in Files:
-        DF = import_data(filestring)
+        file = os.path.join("data", filestring)
+        DF = import_data(file)
         # print(list(DF))
         plot(DF,filestring)
 

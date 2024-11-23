@@ -36,7 +36,6 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
 
     cell_values = pd.DataFrame(columns=['eta', 'phi', 'r', 'value'])
 
-
     for cell_number, value in enumerate(entry):
 
         if cell_number in map0:
@@ -61,8 +60,6 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
 
     fig = px.scatter_3d(cell_values, x="eta", y="phi", z="r", color="value")
     fig.show()
-
-
 
 def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", 
                  reject_data_filename="l1calo_hist_ZMUMU_extended.root", 
@@ -120,7 +117,8 @@ def evaluate_sklearn_model(y_test, y_pred):
     print("Classification Report:\n",classification_report(y_test, y_pred))
     print("Confusion Matrix:\n",confusion_matrix(y_test, y_pred))
     print("Mean Squared Error:\n",mean_squared_error(y_test, y_pred))
-    
+
+# XX Works for SVC and SGB so far
 def compute_roc(model, X_test, y_test):
     y_scores = model.decision_function(X_test)
     fpr, tpr, _ = roc_curve(y_test, y_scores)
