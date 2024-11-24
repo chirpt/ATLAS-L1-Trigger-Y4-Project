@@ -64,9 +64,9 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
 def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", 
                  reject_data_filename="l1calo_hist_ZMUMU_extended.root", 
                  save_path="prepared_data.npz"):
-    accept_data_filename = os.path.join(os.path.pardir, "data", "l1calo_hist_EGZ_extended.root")
-    reject_data_filename = os.path.join(os.path.pardir, "data", "l1calo_hist_ZMUMU_extended.root")
-    save_path = os.path.join(os.path.pardir, "data", "prepared_data.npz")
+    accept_data_filename = os.path.join(os.path.pardir, "data", accept_data_filename)
+    reject_data_filename = os.path.join(os.path.pardir, "data", reject_data_filename)
+    save_path = os.path.join(os.path.pardir, "data", save_path)
 
     if not os.path.exists(save_path):
         print("Preparing data...")
@@ -80,7 +80,7 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
 
         data = np.concatenate((accepted_numpy, rejected_numpy), axis=0)
         labels = np.concatenate((accepted_labels, rejected_labels), axis=0)
-
+        
         np.random.seed(42)
         np.random.shuffle(data)
         np.random.seed(42)
