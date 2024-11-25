@@ -98,6 +98,23 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
 
     return X_train, X_test, y_train, y_test
 
+def prepare_data_2(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root"):
+    accept_data_filename= os.path.join(os.path.pardir, "data", "l1calo_hist_EGZ_extended.root")
+    reject_data_filename= os.path.join(os.path.pardir, "data", "l1calo_hist_ZMUMU_extended.root")
+    DFs = import_data_files([accept_data_filename, reject_data_filename])
+    accepted_df = pd.DataFrame({'SuperCell_ET': DFs[0]['SuperCell_ET'], 'offline_ele_pt': DFs[0]['offline_ele_pt'],'Label': 1})
+    rejected_df = pd.DataFrame({'SuperCell_ET': DFs[1]['SuperCell_ET'], 'offline_ele_pt': DFs[1]['offline_ele_pt'],'Label': 0})
+    input_df = pd.concat([accepted_df,rejected_df]).reset_index(drop=True)
+
+    X_train_all, X_test_all, y_train_pd, y_test_pd = train_test_split(input_df, input_df["Label"], test_size=0.2, random_state=42)
+    X_train = ak.to_numpy(X_train_all['SuperCell_ET'])
+    X_test = ak.to_numpy(X_test_all['SuperCell_ET'])
+    y_train = y_train_pd.to_numpy()
+    y_test = y_test_pd.to_numpy()
+
+    return X_train, X_test, y_train, y_test, X_train_all, X_test_all
+
+
 def plot_2D_TSNE(embedded_data, colour_var, title):
     plt.figure(figsize=(10, 6))
     plt.scatter(embedded_data[:, 0], embedded_data[:, 1], c=colour_var, cmap='viridis', s=5)
@@ -133,4 +150,17 @@ def plot_roc(fpr, tpr, roc_auc):
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic')
     plt.legend(loc="lower right")
+    plt.show()
+
+def plot_efficiency_vs_ele_PT(X_test_all, et_Low = 20, et_High = 60):
+    electrons_all,bins,_ = plt.hist( X_test_all.query("Label == 1")["offline_ele_pt"],bins=40,alpha=0.6,range=[et_Low,et_High])
+    electrons_all_tagged,bins,_ = plt.hist( X_test_all.query("Label == 1 & pred == 1")["offline_ele_pt"],bins=40,alpha=0.6,range=[et_Low,et_High])
+    plt.clf()
+    electrons_efficiency = electrons_all_tagged/electrons_all
+
+    plt.bar(bins[:-1], electrons_efficiency, width = np.diff(bins), align='edge', edgecolor='black')
+    plt.title('efficiency against electron PT')
+    plt.xlabel('offline electron pt')
+    plt.ylabel('Efficiency')
+    plt.xlim(bins[0], bins[-1])
     plt.show()
