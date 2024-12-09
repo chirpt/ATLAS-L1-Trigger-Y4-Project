@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import plotly.express as px
 import awkward as ak
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc, PrecisionRecallDisplay
 
 
 
@@ -171,6 +171,18 @@ def plot_roc(fpr, tpr, roc_auc):
     plt.title('Receiver Operating Characteristic')
     plt.legend(loc="lower right")
     plt.show()
+    
+def precision_recall(model, X_test, y_test):
+    if hasattr(model, "decision_function"):  # For models like SVM or SGD
+        y_scores = model.decision_function(X_test)
+    elif hasattr(model, "predict_proba"):  # For models like XGBoost or other tree-based models
+        y_scores = model.predict_proba(X_test)[:, 1]
+    else:
+        raise ValueError("Model must have either a decision_function or predict_proba method.")
+    
+    display = PrecisionRecallDisplay.from_predictions(
+    y_test, y_scores, name=model, plot_chance_level=True)
+    _ = display.ax_.set_title("2-class Precision-Recall curve")
 
 def plot_efficiency_vs_ele_PT(X_test_all, et_Low = 20, et_High = 60,prediction_parameter="pred",title_string="model"):
     electrons_all,bins,_ = plt.hist( X_test_all.query("Label == 1")["offline_ele_pt"],bins=40,alpha=0.6,range=[et_Low,et_High])
