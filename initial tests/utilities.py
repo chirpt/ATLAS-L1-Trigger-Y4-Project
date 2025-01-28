@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import awkward as ak
 import math
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc, PrecisionRecallDisplay
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc, PrecisionRecallDisplay, recall_score, precision_score, f1_score
 import plotly.graph_objects as go
 
 
@@ -225,6 +225,7 @@ def plot_2D_TSNE(embedded_data, colour_var, title):
     plt.title(title)
     plt.xlabel("t-SNE Dimension 1")
     plt.ylabel("t-SNE Dimension 2")
+    plt.legend(loc="lower right")
     plt.show()
 
 def plot_3D_TSNE(embedded_data, colour_var,point_size=2):
@@ -232,15 +233,21 @@ def plot_3D_TSNE(embedded_data, colour_var,point_size=2):
     fig.update_traces(marker=dict(line=dict(width=0),size=np.ones(colour_var.shape)*point_size))
     fig.show()
 
-def evaluate_sklearn_model(y_test, y_pred,show_CR=True,show_MSE=True,model_name=None):
+def evaluate_sklearn_model(y_test, y_pred,get_recall=True,get_precision=True,get_f1=True,show_CR=True,show_MSE=True,model_name=None):
     if model_name != None:
         print("Evaluation of "+model_name)
-    print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
+    print(f"Accuracy: {accuracy_score(y_test, y_pred):.8f}")
+    if get_recall:
+        print(f"Recall: {recall_score(y_test, y_pred):.8f}")
+    if get_precision:
+        print(f"Precision: {precision_score(y_test, y_pred):.8f}")
+    if get_precision:
+        print(f"F1 Score: {f1_score(y_test, y_pred):.8f}")
     if show_CR:
         print("Classification Report:\n",classification_report(y_test, y_pred))
     print("Confusion Matrix:\n",confusion_matrix(y_test, y_pred))
     if show_MSE:
-        print(f"Mean Squared Error: {mean_squared_error(y_test, y_pred):.4f}\n")
+        print(f"Mean Squared Error: {mean_squared_error(y_test, y_pred):.8f}\n")
 
 def compute_roc(model, X_test, y_test):
     if hasattr(model, "decision_function"):  # For models like SVM or SGD
@@ -256,7 +263,7 @@ def compute_roc(model, X_test, y_test):
 
 def plot_roc(fpr, tpr, roc_auc):
     plt.figure()
-    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f"ROC curve (AUC = {roc_auc:.4f})")
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f"ROC curve (AUC = {roc_auc:.8f})")
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
@@ -283,8 +290,8 @@ def plot_efficiency_vs_ele_PT(X_test_all, et_Low = 20, et_High = 60,prediction_p
     electrons_efficiency = electrons_all_tagged/electrons_all
 
     plt.bar(bins[:-1], electrons_efficiency, width = np.diff(bins), align='edge', edgecolor='black')
-    plt.title(f'efficiency against electron PT for {title_string}')
-    plt.xlabel('offline electron pt')
+    plt.title(f'Efficiency against electron PT: {title_string}')
+    plt.xlabel('Offline electron pt (GeV)')
     plt.ylabel('Efficiency')
     plt.xlim(bins[0], bins[-1])
     plt.show()
@@ -295,13 +302,14 @@ def multi_roc(classifiers, X_test, y_test, classifiers_2=None, X_test_2=None, y_
     for classifier in classifiers:
         model = classifiers[classifier]
         fpr, tpr, roc_auc = compute_roc(model,X_test,y_test)
-        plt.plot(fpr, tpr, lw=1, label=classifier+f" ROC (AUC = {roc_auc:.4f})")
+        plt.plot(fpr, tpr, lw=1, label=classifier+f" ROC (AUC = {roc_auc:.8f})")
 
     if classifiers_2 != None:
         for classifier in classifiers_2:
             model = classifiers_2[classifier]
             fpr, tpr, roc_auc = compute_roc(model,X_test_2,y_test_2)
-            plt.plot(fpr, tpr, lw=1, label=classifier+f" ROC (AUC = {roc_auc:.4f})")
+            plt.plot(fpr, tpr, lw=1, label=classifier+f" ROC (AUC = {roc_auc:.8f})")
+            
 
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
