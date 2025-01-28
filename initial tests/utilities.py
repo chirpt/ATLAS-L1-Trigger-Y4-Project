@@ -132,10 +132,6 @@ def format_numpy_training_input(DFs,format_mode):
 
     return np.concatenate((accepted_numpy, rejected_numpy), axis=0)
 
-def dataset_size_equaliser():
-    size = max(DFs[0].shape, DFs[i].shape[1])
-     
-
 def generate_topocluster_ET_distribution(DF):
     distance_boundaries = [0.1,0.2,0.3,0.4]
     ET_distributions = np.empty((DF.shape[0],len(distance_boundaries)))
