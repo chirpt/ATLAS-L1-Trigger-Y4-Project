@@ -8,8 +8,9 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import plotly.express as px
 import awkward as ak
+import math
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc, PrecisionRecallDisplay
-
+import plotly.graph_objects as go
 
 
 def import_data(file):
@@ -122,9 +123,100 @@ def format_numpy_training_input(DFs,format_mode):
 
         accepted_numpy = np.array([np.delete(row, delete_indices[cond]) for row, cond in zip(full_accepted_numpy, accepted_seed_indices)])
         rejected_numpy = np.array([np.delete(row, delete_indices[cond]) for row, cond in zip(full_rejected_numpy, rejected_seed_indices)])
+    
+    elif format_mode == "topocluster_ET_boundaries":
+        print("attempting to generate topo training data")
+        accepted_numpy = generate_topocluster_ET_distribution(DFs[0])
+        rejected_numpy = generate_topocluster_ET_distribution(DFs[1])
 
 
     return np.concatenate((accepted_numpy, rejected_numpy), axis=0)
+
+def dataset_size_equaliser():
+    size = max(DFs[0].shape, DFs[i].shape[1])
+     
+
+def generate_topocluster_ET_distribution(DF):
+    distance_boundaries = [0.1,0.2,0.3,0.4]
+    ET_distributions = np.empty((DF.shape[0],len(distance_boundaries)))
+    for i in range(DF.shape[0]):
+        entry = DF.loc[i]
+        TopoCluster_ETs = entry["TopoCluster_ET"]
+        TopoCluster_etas = entry["TopoCluster_eta"]
+        TopoCluster_phis = entry["TopoCluster_phi"]
+        if sum(TopoCluster_ETs) > 0:
+            barycentre = calculate_topo_barycentre(TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
+            topocluster_distances = get_distances_to_barycentre(barycentre,TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
+            ET_distributions[i] = get_ET_distribution(distance_boundaries,topocluster_distances,TopoCluster_ETs)
+        else:
+            ET_distributions[i] = [0 for k in range(len(distance_boundaries))]
+        if i % 1000 ==0:
+            print(round(i/DF.shape[0]*100,1),"%")
+
+    return ET_distributions
+
+def calculate_topo_barycentre(TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis):
+    barycentre = [0,0]
+    ET_total = sum(TopoCluster_ETs)
+    barycentre[0] = sum(x * m for x, m in zip(TopoCluster_etas, TopoCluster_ETs)) / ET_total
+    barycentre[1] = sum(y * m for y, m in zip(TopoCluster_phis, TopoCluster_ETs)) / ET_total
+    return barycentre
+
+def get_distances_to_barycentre(barycentre,TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis):
+    topocluster_distances = [0 for i in range(len(TopoCluster_ETs))]
+    for i in range(len(TopoCluster_ETs)):
+        topocluster_distance = math.sqrt((TopoCluster_etas[i]-barycentre[0])**2+(TopoCluster_phis[i]-barycentre[1])**2)
+        topocluster_distances[i] = topocluster_distance
+    return topocluster_distances
+
+def get_ET_distribution(distance_boundaries,topocluster_distances,TopoCluster_ETs):
+    lower_boundry = 0
+    topocluster_ET_distribution = [0 for i in range(len(distance_boundaries))]
+    for i, upper_boundry in enumerate(distance_boundaries):
+        for j, topocluster_distance in enumerate(topocluster_distances):
+            if topocluster_distance > lower_boundry and topocluster_distance <= upper_boundry:
+                topocluster_ET_distribution[i] += TopoCluster_ETs[j]
+        lower_boundry = upper_boundry
+    return np.array(topocluster_ET_distribution)
+
+def visualise_topocluster_ETs(DF,num_bins):
+    all_topocluster_ET_distances = []
+    for i in range(DF.shape[0]):
+        entry = DF.loc[i]
+        TopoCluster_ETs = entry["TopoCluster_ET"]
+        TopoCluster_etas = entry["TopoCluster_eta"]
+        TopoCluster_phis = entry["TopoCluster_phi"]
+        if sum(TopoCluster_ETs) > 0:
+            barycentre = calculate_topo_barycentre(TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
+            topocluster_distances = get_distances_to_barycentre(barycentre,TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
+            for j, topocluster_distance in enumerate(topocluster_distances):
+                topocluster_ET = TopoCluster_ETs[j]
+                all_topocluster_ET_distances.append([topocluster_distance,topocluster_ET])
+        else:
+            pass
+        if i % 1000 ==0:
+            print(round(i/DF.shape[0]*100,1),"%")
+
+    all_topocluster_ET_distances_np = np.array(all_topocluster_ET_distances)
+    hist, xedges, yedges = np.histogram2d(all_topocluster_ET_distances_np[:,0], all_topocluster_ET_distances_np[:,1], bins=num_bins)
+    xpos, ypos = np.meshgrid(xedges[:-1], yedges[:-1], indexing="ij")
+    fig = go.Figure(data=[go.Surface(z=hist, x=xpos, y=ypos)])
+    fig.update_layout(
+    title="3D Histogram (30 bins)",
+    scene=dict(
+        xaxis_title='(Distance from Barycentre)',
+        yaxis_title='(Topocluster ET)',
+        zaxis_title='Frequency',
+        xaxis=dict(range=[0, 0.5]),
+        yaxis=dict(range=[0, 100_000])
+        )
+    )
+
+    fig.show()
+
+
+
+
 
 def plot_2D_TSNE(embedded_data, colour_var, title):
     plt.figure(figsize=(10, 6))
