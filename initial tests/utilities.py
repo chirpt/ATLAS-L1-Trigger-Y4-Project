@@ -11,6 +11,7 @@ import awkward as ak
 import math
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc, PrecisionRecallDisplay, recall_score, precision_score, f1_score
 import plotly.graph_objects as go
+from tqdm.auto import tqdm
 
 
 def import_data(file):
@@ -63,7 +64,8 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
     fig.show()
 
 
-def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root", data_subdir="ZMUMU_EGZ_extended_np_pd", format_mode="SuperCell_ET", get_pT=True):
+def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root",
+                 data_subdir="ZMUMU_EGZ_extended_np_pd", format_mode="SuperCell_ET", get_pT=True, distance_boundaries=[0.1,0.2,0.3,0.4]):
     save_path = os.path.join(os.path.pardir, "data", data_subdir)
     if os.path.exists(os.path.join(save_path,"np_data.npz")) and os.path.exists(os.path.join(save_path,"input_df.parquet")):
         print(f"found preprepared data in {save_path}")
@@ -83,7 +85,7 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
         accepted_df = pd.DataFrame({'offline_ele_pt': DFs[0]['offline_ele_pt'],'Label': 1})
         rejected_df = pd.DataFrame({'offline_ele_pt': DFs[1]['offline_ele_pt'],'Label': 0})
 
-        input_np = format_numpy_training_input(DFs,format_mode)
+        input_np = format_numpy_training_input(DFs,format_mode,distance_boundaries)
         input_df = pd.concat([accepted_df,rejected_df]).reset_index(drop=True)
         labels_np = np.concatenate((accepted_labels, rejected_labels), axis=0)
         
@@ -99,7 +101,7 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
         X_train, X_test, y_train, y_test = train_test_split(input_np, labels_np, test_size=test_size, random_state=42)
         return X_train, X_test, y_train, y_test
 
-def format_numpy_training_input(DFs,format_mode):
+def format_numpy_training_input(DFs,format_mode,distance_boundaries):
     if format_mode == "SuperCell_ET":
         accepted_numpy = ak.to_numpy(DFs[0]['SuperCell_ET'])
         rejected_numpy = ak.to_numpy(DFs[1]['SuperCell_ET'])
@@ -126,16 +128,15 @@ def format_numpy_training_input(DFs,format_mode):
     
     elif format_mode == "topocluster_ET_boundaries":
         print("attempting to generate topo training data")
-        accepted_numpy = generate_topocluster_ET_distribution(DFs[0])
-        rejected_numpy = generate_topocluster_ET_distribution(DFs[1])
+        accepted_numpy = generate_topocluster_ET_distribution(DFs[0],distance_boundaries)
+        rejected_numpy = generate_topocluster_ET_distribution(DFs[1],distance_boundaries)
 
 
     return np.concatenate((accepted_numpy, rejected_numpy), axis=0)
 
-def generate_topocluster_ET_distribution(DF):
-    distance_boundaries = [0.1,0.2,0.3,0.4]
+def generate_topocluster_ET_distribution(DF,distance_boundaries):
     ET_distributions = np.empty((DF.shape[0],len(distance_boundaries)))
-    for i in range(DF.shape[0]):
+    for i in tqdm(range(DF.shape[0])):
         entry = DF.loc[i]
         TopoCluster_ETs = entry["TopoCluster_ET"]
         TopoCluster_etas = entry["TopoCluster_eta"]
@@ -146,8 +147,8 @@ def generate_topocluster_ET_distribution(DF):
             ET_distributions[i] = get_ET_distribution(distance_boundaries,topocluster_distances,TopoCluster_ETs)
         else:
             ET_distributions[i] = [0 for k in range(len(distance_boundaries))]
-        if i % 1000 ==0:
-            print(round(i/DF.shape[0]*100,1),"%")
+        # if i % 1000 ==0:
+        #     print(round(i/DF.shape[0]*100,1),"%")
 
     return ET_distributions
 
