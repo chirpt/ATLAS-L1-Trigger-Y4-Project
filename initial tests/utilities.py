@@ -252,7 +252,7 @@ def evaluate_sklearn_model(y_test, y_pred,get_recall=True,get_precision=True,get
         print(f"Recall: {recall_score(y_test, y_pred):.8f}")
     if get_precision:
         print(f"Precision: {precision_score(y_test, y_pred):.8f}")
-    if get_precision:
+    if get_f1:
         print(f"F1 Score: {f1_score(y_test, y_pred):.8f}")
     if show_CR:
         print("Classification Report:\n",classification_report(y_test, y_pred))
