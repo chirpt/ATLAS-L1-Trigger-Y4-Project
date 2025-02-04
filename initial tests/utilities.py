@@ -65,7 +65,9 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
 
 
 def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root",
-                 data_subdir="ZMUMU_EGZ_extended_np_pd", format_mode="SuperCell_ET", get_pT=True, distance_boundaries=[0.1,0.2,0.3,0.4]):
+                 data_subdir="ZMUMU_EGZ_extended_np_pd", format_mode="SuperCell_ET", get_pT=True, distance_boundaries=[0.1,0.2,0.3,0.4],equalised=False):
+    if equalised:
+        data_subdir += "_equalised"
     save_path = os.path.join(os.path.pardir, "data", data_subdir)
     if os.path.exists(os.path.join(save_path,"np_data.npz")) and os.path.exists(os.path.join(save_path,"input_df.parquet")):
         print(f"found preprepared data in {save_path}")
@@ -79,6 +81,9 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
         accept_data_path= os.path.join(os.path.pardir, "data", accept_data_filename)
         reject_data_path= os.path.join(os.path.pardir, "data", reject_data_filename)
         DFs = import_data_files([accept_data_path, reject_data_path])
+        if equalised:
+            DFs = equalise(DFs)
+
 
         accepted_labels = np.ones(DFs[0].shape[0])
         rejected_labels = np.zeros(DFs[1].shape[0])
@@ -134,6 +139,16 @@ def format_numpy_training_input(DFs,format_mode,distance_boundaries):
 
     return np.concatenate((accepted_numpy, rejected_numpy), axis=0)
 
+
+def equalise(DFs):
+    if DFs[0].shape[0] < DFs[1].shape[0]:
+        DFs[1] = DFs[1].sample(n=DFs[0].shape[0], random_state=42).reset_index(drop=True)
+    elif DFs[0].shape[0] > DFs[1].shape[0]:
+        DFs[0] = DFs[0].sample(n=DFs[1].shape[0], random_state=42).reset_index(drop=True)
+    print("Equalised:", DFs[0].shape, DFs[1].shape)
+    return [DFs[0], DFs[1]]
+
+
 def generate_topocluster_ET_distribution(DF,distance_boundaries):
     ET_distributions = np.empty((DF.shape[0],len(distance_boundaries)))
     for i in tqdm(range(DF.shape[0])):
@@ -147,8 +162,6 @@ def generate_topocluster_ET_distribution(DF,distance_boundaries):
             ET_distributions[i] = get_ET_distribution(distance_boundaries,topocluster_distances,TopoCluster_ETs)
         else:
             ET_distributions[i] = [0 for k in range(len(distance_boundaries))]
-        # if i % 1000 ==0:
-        #     print(round(i/DF.shape[0]*100,1),"%")
 
     return ET_distributions
 
@@ -233,7 +246,8 @@ def plot_3D_TSNE(embedded_data, colour_var,point_size=2):
 def evaluate_sklearn_model(y_test, y_pred,get_recall=True,get_precision=True,get_f1=True,show_CR=True,show_MSE=True,model_name=None):
     if model_name != None:
         print("Evaluation of "+model_name)
-    print(f"Accuracy: {accuracy_score(y_test, y_pred):.8f}")
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Accuracy: {accuracy:.8f}")
     if get_recall:
         print(f"Recall: {recall_score(y_test, y_pred):.8f}")
     if get_precision:
@@ -245,6 +259,8 @@ def evaluate_sklearn_model(y_test, y_pred,get_recall=True,get_precision=True,get
     print("Confusion Matrix:\n",confusion_matrix(y_test, y_pred))
     if show_MSE:
         print(f"Mean Squared Error: {mean_squared_error(y_test, y_pred):.8f}\n")
+
+    return f"{accuracy:.8f}"
 
 def compute_roc(model, X_test, y_test):
     if hasattr(model, "decision_function"):  # For models like SVM or SGD
@@ -313,4 +329,18 @@ def multi_roc(classifiers, X_test, y_test, classifiers_2=None, X_test_2=None, y_
     plt.title('Receiver Operating Characteristic')
     plt.legend(loc="lower right")
     plt.savefig("multi_roc", dpi=400, bbox_inches='tight')
+    plt.show()
+
+def multi_roc_multi_data_single_plot(classifiers, X_tests, y_tests,filename):
+    plt.figure(figsize=(15, 15))
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    for i, classifier in enumerate(classifiers):
+        model = classifiers[classifier]
+        fpr, tpr, roc_auc = compute_roc(model,X_tests[i],y_tests[i])
+        plt.plot(fpr, tpr, lw=1, label=classifier+f" ROC (AUC = {roc_auc:.8f})")
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic')
+    plt.legend(loc="lower right")
+    plt.savefig(filename, dpi=400, bbox_inches='tight')
     plt.show()
