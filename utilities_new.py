@@ -337,9 +337,9 @@ def train_evaluate_all_classifiers(binary_classifiers,X_train, X_test, y_train, 
             precision_arr, recall_arr, pr_auc, chance_level = compute_precision_recall(clf, X_test, y_test)
             bins, electrons_efficiency = compute_efficiency_vs_ele_PT(pd_passthrough_test, et_Low = 20, et_High = 60,prediction_parameter="pred")
             
-            save_roc_data(fpr, tpr, roc_auc, f'{name}')
-            save_precision_recall_data(precision_arr, recall_arr, pr_auc, chance_level, f'{name}')
-            save_efficiency_vs_ele_PT(bins, electrons_efficiency, f'{name}')
+            save_roc_data(fpr, tpr, roc_auc, f'{name}', description)
+            save_precision_recall_data(precision_arr, recall_arr, pr_auc, chance_level, f'{name}', description)
+            save_efficiency_vs_ele_PT(bins, electrons_efficiency, f'{name}', description, format_mode="SuperCell_ET")
             
             # plot_roc(fpr, tpr, roc_auc, f'{name}')
             # plot_precision_recall(precision_arr, recall_arr, pr_auc, chance_level, f'{name}')
@@ -574,7 +574,7 @@ def save_precision_recall_data(precision_arr, recall_arr, pr_auc, chance_level, 
 
     print(f"Precision-Recall data saved to {filename}")
 
-def save_efficiency_vs_ele_PT(bins, electrons_efficiency, model_name, description):
+def save_efficiency_vs_ele_PT(bins, electrons_efficiency, description, model_name):
     data = {
         "Bins": bins.tolist(),
         "Efficiency": electrons_efficiency.tolist()
