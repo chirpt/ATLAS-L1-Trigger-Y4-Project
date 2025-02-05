@@ -541,43 +541,52 @@ def multi_roc_multi_data_single_plot(classifiers, X_tests, y_tests,filename):
     plt.savefig(filename, dpi=400, bbox_inches='tight')
     plt.show()
     
-def save_roc_data(fpr, tpr, roc_auc,  model_name):
+def save_roc_data(fpr, tpr, roc_auc, model_name, description):
     data = {
         "False Positive Rate": fpr.tolist(),
         "True Positive Rate": tpr.tolist(),
         "ROC AUC": roc_auc
     }
     
-    filename = f"roc_data_{model_name}.json"
+    directory = "roc"
+    os.makedirs(directory, exist_ok=True)
+    
+    filename = os.path.join(directory, f"roc_data_{description}_{model_name}.json")
     with open(filename, "w") as file:
         json.dump(data, file, indent=4)
     
     print(f"ROC data saved to {filename}")
 
-def save_precision_recall_data(precision_arr, recall_arr, pr_auc, chance_level, model_name):
+def save_precision_recall_data(precision_arr, recall_arr, pr_auc, chance_level, model_name, description):
     data = {
-            "Precision": precision_arr.tolist(),
+        "Precision": precision_arr.tolist(),
         "Recall": recall_arr.tolist(),
         "Precision-Recall AUC": pr_auc,
         "Chance Level": chance_level
     }
-    
-    filename = f"precision_recall_data_{model_name}.json"
+
+    directory = "precision_recall"
+    os.makedirs(directory, exist_ok=True)
+
+    filename = os.path.join(directory, f"precision_recall_data_{description}_{model_name}.json")
     with open(filename, "w") as file:
         json.dump(data, file, indent=4)
-    
+
     print(f"Precision-Recall data saved to {filename}")
 
-def save_efficiency_vs_ele_PT(bins, electrons_efficiency, model_name):
+def save_efficiency_vs_ele_PT(bins, electrons_efficiency, model_name, description):
     data = {
         "Bins": bins.tolist(),
         "Efficiency": electrons_efficiency.tolist()
     }
-    
-    filename = f"efficiency_vs_ele_PT_{model_name}.json"
+
+    directory = "efficiency_vs_ele_pt"
+    os.makedirs(directory, exist_ok=True)
+
+    filename = os.path.join(directory, f"efficiency_vs_ele_pt_{description}_{model_name}.json")
     with open(filename, "w") as file:
         json.dump(data, file, indent=4)
-    
+
     print(f"Efficiency vs Electron PT data saved to {filename}")
     
 #Read
