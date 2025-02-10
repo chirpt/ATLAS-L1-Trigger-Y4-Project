@@ -1,24 +1,27 @@
 import os
+import csv
 import json
+import math
 import pickle
 import uproot
-import pandas as pd
 import numpy as np
-import uproot
-from sklearn.model_selection import train_test_split
-import matplotlib.pyplot as plt
-import plotly.express as px
+import pandas as pd
 import awkward as ak
-import math
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc, PrecisionRecallDisplay, recall_score, precision_score, f1_score, precision_recall_curve
-import plotly.graph_objects as go
+
 from tqdm.auto import tqdm
-from sklearn.utils import all_estimators
-from sklearn.linear_model import LogisticRegression
-from sklearn.base import ClassifierMixin
-from sklearn.ensemble import RandomForestClassifier
 from inspect import signature
-import csv
+
+import plotly.express as px
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+
+from sklearn.base import ClassifierMixin
+from sklearn.utils import all_estimators
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc, PrecisionRecallDisplay, recall_score, precision_score, f1_score, precision_recall_curve
+
 from xgboost import XGBClassifier
 
 
@@ -108,7 +111,7 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
 
         if cell_number in map0:
             r=0
-            eta = 4* (map0.index(cell_number) %3)+ 1.5
+            eta = 4* (map0.index(cell_number) %3) + 1.5
         elif cell_number in map1:
             r=1
             eta = map1.index(cell_number) %12
@@ -124,28 +127,28 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
 
         phi = cell_number // 33
 
-        cell_values.loc[len(cell_values.index)] = [eta, phi, r,value] 
+        cell_values.loc[len(cell_values.index)] = [eta, phi, r, value] 
 
     fig = px.scatter_3d(cell_values, x="eta", y="phi", z="r", color="value")
     fig.show()
 
 #Prepare
 def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root",
-                 data_subdir="ZMUMU_EGZ_extended_np_pd", format_mode="SuperCell_ET", get_pT=True, distance_boundaries=[0.1,0.2,0.3,0.4],equalised=False):
+                 data_subdir="ZMUMU_EGZ_extended_np_pd", format_mode="SuperCell_ET", get_pT=True, distance_boundaries=[0.1,0.2,0.3,0.4], equalised=False):
     if equalised:
         data_subdir += "_equalised"
     save_path = os.path.join(os.path.pardir, "data", data_subdir)
-    if os.path.exists(os.path.join(save_path,"np_data.npz")) and os.path.exists(os.path.join(save_path,"input_df.parquet")):
+    if os.path.exists(os.path.join(save_path, "np_data.npz")) and os.path.exists(os.path.join(save_path, "input_df.parquet")):
         print(f"found preprepared data in {save_path}")
-        np_data = np.load(os.path.join(save_path,"np_data.npz"))
+        np_data = np.load(os.path.join(save_path, "np_data.npz"))
         input_np, labels_np = np_data["input_np"], np_data["labels_np"]
-        input_df = pd.read_parquet(os.path.join(save_path,"input_df.parquet"))
+        input_df = pd.read_parquet(os.path.join(save_path, "input_df.parquet"))
 
 
     else:
         print(f"preprepared data in {save_path} is missing, preparing and saving here")
-        accept_data_path= os.path.join(os.path.pardir, "data", accept_data_filename)
-        reject_data_path= os.path.join(os.path.pardir, "data", reject_data_filename)
+        accept_data_path = os.path.join(os.path.pardir, "data", accept_data_filename)
+        reject_data_path = os.path.join(os.path.pardir, "data", reject_data_filename)
         DFs = import_data_files([accept_data_path, reject_data_path])
         if equalised:
             DFs = equalise(DFs)
@@ -156,14 +159,14 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
         accepted_df = pd.DataFrame({'offline_ele_pt': DFs[0]['offline_ele_pt'],'Label': 1})
         rejected_df = pd.DataFrame({'offline_ele_pt': DFs[1]['offline_ele_pt'],'Label': 0})
 
-        input_np = format_numpy_training_input(DFs,format_mode,distance_boundaries)
-        input_df = pd.concat([accepted_df,rejected_df]).reset_index(drop=True)
+        input_np = format_numpy_training_input(DFs, format_mode, distance_boundaries)
+        input_df = pd.concat([accepted_df, rejected_df]).reset_index(drop=True)
         labels_np = np.concatenate((accepted_labels, rejected_labels), axis=0)
         
         if not os.path.exists(save_path):
             os.mkdir(save_path)
-        np.savez(os.path.join(save_path,"np_data.npz"), input_np=input_np,labels_np=labels_np)
-        input_df.to_parquet(os.path.join(save_path,"input_df.parquet"), index=False)
+        np.savez(os.path.join(save_path,"np_data.npz"), input_np=input_np, labels_np=labels_np)
+        input_df.to_parquet(os.path.join(save_path, "input_df.parquet"), index=False)
 
     if get_pT == True:
         X_train, X_test, pd_passthrough_train, pd_passthrough_test, y_train, y_test = train_test_split(input_np, input_df, labels_np, test_size=test_size, random_state=42)
@@ -172,7 +175,7 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
         X_train, X_test, y_train, y_test = train_test_split(input_np, labels_np, test_size=test_size, random_state=42)
         return X_train, X_test, y_train, y_test
 
-def format_numpy_training_input(DFs,format_mode,distance_boundaries):
+def format_numpy_training_input(DFs,format_mode, distance_boundaries):
     if format_mode == "SuperCell_ET":
         accepted_numpy = ak.to_numpy(DFs[0]['SuperCell_ET'])
         rejected_numpy = ak.to_numpy(DFs[1]['SuperCell_ET'])
@@ -199,8 +202,8 @@ def format_numpy_training_input(DFs,format_mode,distance_boundaries):
     
     elif format_mode == "topocluster_ET_boundaries":
         print("attempting to generate topo training data")
-        accepted_numpy = generate_topocluster_ET_distribution(DFs[0],distance_boundaries)
-        rejected_numpy = generate_topocluster_ET_distribution(DFs[1],distance_boundaries)
+        accepted_numpy = generate_topocluster_ET_distribution(DFs[0], distance_boundaries)
+        rejected_numpy = generate_topocluster_ET_distribution(DFs[1], distance_boundaries)
 
 
     return np.concatenate((accepted_numpy, rejected_numpy), axis=0)
@@ -213,37 +216,37 @@ def equalise(DFs):
     print("Equalised:", DFs[0].shape, DFs[1].shape)
     return [DFs[0], DFs[1]]
 
-def generate_topocluster_ET_distribution(DF,distance_boundaries):
-    ET_distributions = np.empty((DF.shape[0],len(distance_boundaries)))
+def generate_topocluster_ET_distribution(DF, distance_boundaries):
+    ET_distributions = np.empty((DF.shape[0], len(distance_boundaries)))
     for i in tqdm(range(DF.shape[0])):
         entry = DF.loc[i]
         TopoCluster_ETs = entry["TopoCluster_ET"]
         TopoCluster_etas = entry["TopoCluster_eta"]
         TopoCluster_phis = entry["TopoCluster_phi"]
         if sum(TopoCluster_ETs) > 0:
-            barycentre = calculate_topo_barycentre(TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
-            topocluster_distances = get_distances_to_barycentre(barycentre,TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
-            ET_distributions[i] = get_ET_distribution(distance_boundaries,topocluster_distances,TopoCluster_ETs)
+            barycentre = calculate_topo_barycentre(TopoCluster_ETs, TopoCluster_etas, TopoCluster_phis)
+            topocluster_distances = get_distances_to_barycentre(barycentre, TopoCluster_ETs, TopoCluster_etas, TopoCluster_phis)
+            ET_distributions[i] = get_ET_distribution(distance_boundaries, topocluster_distances, TopoCluster_ETs)
         else:
             ET_distributions[i] = [0 for k in range(len(distance_boundaries))]
 
     return ET_distributions
 
-def calculate_topo_barycentre(TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis):
+def calculate_topo_barycentre(TopoCluster_ETs, TopoCluster_etas, TopoCluster_phis):
     barycentre = [0,0]
     ET_total = sum(TopoCluster_ETs)
     barycentre[0] = sum(x * m for x, m in zip(TopoCluster_etas, TopoCluster_ETs)) / ET_total
     barycentre[1] = sum(y * m for y, m in zip(TopoCluster_phis, TopoCluster_ETs)) / ET_total
     return barycentre
 
-def get_distances_to_barycentre(barycentre,TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis):
+def get_distances_to_barycentre(barycentre, TopoCluster_ETs, TopoCluster_etas, TopoCluster_phis):
     topocluster_distances = [0 for i in range(len(TopoCluster_ETs))]
     for i in range(len(TopoCluster_ETs)):
-        topocluster_distance = math.sqrt((TopoCluster_etas[i]-barycentre[0])**2+(TopoCluster_phis[i]-barycentre[1])**2)
+        topocluster_distance = math.sqrt((TopoCluster_etas[i] - barycentre[0])**2 + (TopoCluster_phis[i] - barycentre[1])**2)
         topocluster_distances[i] = topocluster_distance
     return topocluster_distances
 
-def get_ET_distribution(distance_boundaries,topocluster_distances,TopoCluster_ETs):
+def get_ET_distribution(distance_boundaries, topocluster_distances, TopoCluster_ETs):
     lower_boundry = 0
     topocluster_ET_distribution = [0 for i in range(len(distance_boundaries))]
     for i, upper_boundry in enumerate(distance_boundaries):
@@ -253,7 +256,7 @@ def get_ET_distribution(distance_boundaries,topocluster_distances,TopoCluster_ET
         lower_boundry = upper_boundry
     return np.array(topocluster_ET_distribution)
 
-def visualise_topocluster_ETs(DF,num_bins):
+def visualise_topocluster_ETs(DF, num_bins):
     all_topocluster_ET_distances = []
     for i in range(DF.shape[0]):
         entry = DF.loc[i]
@@ -261,15 +264,15 @@ def visualise_topocluster_ETs(DF,num_bins):
         TopoCluster_etas = entry["TopoCluster_eta"]
         TopoCluster_phis = entry["TopoCluster_phi"]
         if sum(TopoCluster_ETs) > 0:
-            barycentre = calculate_topo_barycentre(TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
-            topocluster_distances = get_distances_to_barycentre(barycentre,TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
+            barycentre = calculate_topo_barycentre(TopoCluster_ETs, TopoCluster_etas, TopoCluster_phis)
+            topocluster_distances = get_distances_to_barycentre(barycentre, TopoCluster_ETs, TopoCluster_etas, TopoCluster_phis)
             for j, topocluster_distance in enumerate(topocluster_distances):
                 topocluster_ET = TopoCluster_ETs[j]
-                all_topocluster_ET_distances.append([topocluster_distance,topocluster_ET])
+                all_topocluster_ET_distances.append([topocluster_distance, topocluster_ET])
         else:
             pass
         if i % 1000 ==0:
-            print(round(i/DF.shape[0]*100,1),"%")
+            print(round(i/DF.shape[0]*100,1), "%")
 
     all_topocluster_ET_distances_np = np.array(all_topocluster_ET_distances)
     hist, xedges, yedges = np.histogram2d(all_topocluster_ET_distances_np[:,0], all_topocluster_ET_distances_np[:,1], bins=num_bins)
@@ -289,8 +292,7 @@ def visualise_topocluster_ETs(DF,num_bins):
     fig.show()
 
 #Train
-def train_evaluate_all_classifiers(binary_classifiers,X_train, X_test, y_train, y_test, pd_passthrough_train, pd_passthrough_test, description):
-    # binary_classifiers_short = dict(list(binary_classifiers.items())[:10])
+def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train, y_test, pd_passthrough_train, pd_passthrough_test, description):
     results = []
     plotting_results = []
     for name, Classifier in tqdm(binary_classifiers.items()):
@@ -337,9 +339,9 @@ def train_evaluate_all_classifiers(binary_classifiers,X_train, X_test, y_train, 
             precision_arr, recall_arr, pr_auc, chance_level = compute_precision_recall(clf, X_test, y_test)
             bins, electrons_efficiency = compute_efficiency_vs_ele_PT(pd_passthrough_test, et_Low = 20, et_High = 60,prediction_parameter="pred")
             
-            save_roc_data(fpr, tpr, roc_auc, f'{name}')
-            save_precision_recall_data(precision_arr, recall_arr, pr_auc, chance_level, f'{name}')
-            save_efficiency_vs_ele_PT(bins, electrons_efficiency, f'{name}')
+            save_roc_data(fpr, tpr, roc_auc, f'{name}', description)
+            save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, chance_level, f'{name}')
+            save_efficiency_vs_ele_PT(bins, electrons_efficiency, f'{name}', description)
             
             # plot_roc(fpr, tpr, roc_auc, f'{name}')
             # plot_precision_recall(precision_arr, recall_arr, pr_auc, chance_level, f'{name}')
@@ -380,7 +382,7 @@ def train_evaluate_all_classifiers(binary_classifiers,X_train, X_test, y_train, 
                 })
     return results
 
-def save_csv(output_file,results):
+def save_csv(output_file, results):
     
     with open(output_file, mode="w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=["Classifier", "Accuracy", "TN", "FP", "FN", "TP", "Precision", "Recall", "F1", "MSE"])
@@ -390,17 +392,17 @@ def save_csv(output_file,results):
     print(f"Results saved to {output_file}")
 
 #Evaluate
-def evaluate_sklearn_model(y_test, y_pred,get_recall=True,get_precision=True,get_f1=True,show_CR=True,show_MSE=True,model_name=None):
+def evaluate_sklearn_model(y_test, y_pred, get_recall=True, get_precision=True, get_f1=True, show_CR=True, show_MSE=True, model_name=None):
     recall = None
     precision = None
     f1 = None
     mse = None
     
     if model_name != None:
-        print("Evaluation of "+model_name)
+        print("Evaluation of " + model_name)
     
     tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
-    print("Confusion Matrix:\n",confusion_matrix(y_test, y_pred))
+    print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
     accuracy = accuracy_score(y_test, y_pred)
     print(f"Accuracy: {accuracy:.8f}")
     
@@ -414,7 +416,7 @@ def evaluate_sklearn_model(y_test, y_pred,get_recall=True,get_precision=True,get
         f1 = f1_score(y_test, y_pred)
         print(f"F1 Score: {f1:.8f}")
     if show_CR:
-        print("Classification Report:\n",classification_report(y_test, y_pred))
+        print("Classification Report:\n", classification_report(y_test, y_pred))
     
     if show_MSE:
         mse = mean_squared_error(y_test, y_pred)
@@ -435,7 +437,7 @@ def plot_2D_TSNE(embedded_data, colour_var, title):
 
 def plot_3D_TSNE(embedded_data, colour_var,point_size=2):
     fig = px.scatter_3d(x=embedded_data[:, 0], y=embedded_data[:, 1], z=embedded_data[:, 2], color=colour_var)
-    fig.update_traces(marker=dict(line=dict(width=0),size=np.ones(colour_var.shape)*point_size))
+    fig.update_traces(marker=dict(line=dict(width=0), size=np.ones(colour_var.shape)*point_size))
     fig.show()
 
 def compute_roc(model, X_test, y_test):
@@ -489,9 +491,9 @@ def plot_precision_recall(precision, recall, pr_auc, classifier_name, chance_lev
     plt.legend(loc="lower right")
     plt.show()
     
-def compute_efficiency_vs_ele_PT(X_test_all, et_Low = 20, et_High = 60,prediction_parameter="pred"):
-    electrons_all,bins,_ = plt.hist( X_test_all.query("Label == 1")["offline_ele_pt"],bins=40,alpha=0.6,range=[et_Low,et_High])
-    electrons_all_tagged,bins,_ = plt.hist( X_test_all.query(f"Label == 1 & {prediction_parameter} == 1")["offline_ele_pt"],bins=40,alpha=0.6,range=[et_Low,et_High])
+def compute_efficiency_vs_ele_PT(X_test_all, et_Low = 20, et_High = 60, prediction_parameter="pred"):
+    electrons_all,bins, _ = plt.hist( X_test_all.query("Label == 1")["offline_ele_pt"], bins=40, alpha=0.6, range=[et_Low, et_High])
+    electrons_all_tagged, bins,_ = plt.hist( X_test_all.query(f"Label == 1 & {prediction_parameter} == 1")["offline_ele_pt"], bins=40, alpha=0.6, range=[et_Low, et_High])
     electrons_efficiency = electrons_all_tagged/electrons_all
     plt.clf()
     return bins, electrons_efficiency
@@ -557,7 +559,7 @@ def save_roc_data(fpr, tpr, roc_auc, model_name, description):
     
     print(f"ROC data saved to {filename}")
 
-def save_precision_recall_data(precision_arr, recall_arr, pr_auc, chance_level, model_name, description):
+def save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, chance_level, model_name):
     data = {
         "Precision": precision_arr.tolist(),
         "Recall": recall_arr.tolist(),
@@ -590,8 +592,8 @@ def save_efficiency_vs_ele_PT(bins, electrons_efficiency, model_name, descriptio
     print(f"Efficiency vs Electron PT data saved to {filename}")
     
 #Read
-def read_roc(model_name):
-    filename = f"roc_data_{model_name}.json"
+def read_roc(model_name, description):
+    filename = f"roc_data_{description}_{model_name}.json"
     try:
         with open(filename, "r") as file:
             data = json.load(file)
@@ -600,8 +602,8 @@ def read_roc(model_name):
         print(f"File {filename} not found.")
         return None, None, None
 
-def read_precision_recall(model_name):
-    filename = f"precision_recall_data_{model_name}.json"
+def read_precision_recall(model_name, description):
+    filename = f"precision_recall_data_{description}_{model_name}.json"
     try:
         with open(filename, "r") as file:
             data = json.load(file)
@@ -610,8 +612,8 @@ def read_precision_recall(model_name):
         print(f"File {filename} not found.")
         return None, None, None, None
 
-def read_efficiency_vs_ele_PT(model_name):
-    filename = f"efficiency_vs_ele_PT_{model_name}.json"
+def read_efficiency_vs_ele_PT(model_name, description):
+    filename = f"efficiency_vs_ele_PT_{description}_{model_name}.json"
     try:
         with open(filename, "r") as file:
             data = json.load(file)
@@ -620,18 +622,18 @@ def read_efficiency_vs_ele_PT(model_name):
         print(f"File {filename} not found.")
         return None, None
     
-def plot_all_results(binary_classifiers):
+def plot_all_results(binary_classifiers, description):
     for classifier_name, Classifiers in binary_classifiers.items():
-        fpr, tpr, roc_auc = read_roc(classifier_name)
-        precision, recall, pr_auc, chance_level = read_precision_recall(classifier_name)
-        bins, electrons_efficiency = read_efficiency_vs_ele_PT(classifier_name)
+        fpr, tpr, roc_auc = read_roc(classifier_name, description)
+        precision, recall, pr_auc, chance_level = read_precision_recall(classifier_name, description)
+        bins, electrons_efficiency = read_efficiency_vs_ele_PT(classifier_name, description)
         
         if fpr is not None and tpr is not None and roc_auc is not None:
-            plot_roc(fpr, tpr, roc_auc, classifier_name)
+            plot_roc(fpr, tpr, roc_auc, classifier_name, description)
         
         if precision is not None and recall is not None and pr_auc is not None:
-            plot_precision_recall(precision, recall, pr_auc, classifier_name, chance_level=chance_level, plot_chance_level=True)
+            plot_precision_recall(precision, recall, pr_auc, classifier_name, description, chance_level=chance_level, plot_chance_level=True)
 
         if bins is not None and electrons_efficiency is not None:
-            plot_efficiency_vs_ele_PT(bins, electrons_efficiency, classifier_name)
+            plot_efficiency_vs_ele_PT(bins, electrons_efficiency, classifier_name, description)
         
