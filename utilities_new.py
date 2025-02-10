@@ -576,7 +576,7 @@ def save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, c
 
     print(f"Precision-Recall data saved to {filename}")
 
-def save_efficiency_vs_ele_PT(bins, electrons_efficiency, model_name, description):
+def save_efficiency_vs_ele_PT(bins, electrons_efficiency, description, model_name):
     data = {
         "Bins": bins.tolist(),
         "Efficiency": electrons_efficiency.tolist()
