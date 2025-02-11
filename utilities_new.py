@@ -191,6 +191,7 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
 
 def format_numpy_training_input(DFs,format_mode, distance_boundaries):
     if format_mode == "SuperCell_ET":
+        print("running sup")
         accepted_numpy = ak.to_numpy(DFs[0]['SuperCell_ET'])
         rejected_numpy = ak.to_numpy(DFs[1]['SuperCell_ET'])
         
@@ -320,6 +321,7 @@ def visualise_topocluster_ETs(DF, num_bins):
 def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train, y_test, pd_passthrough_train, pd_passthrough_test, description, data_subdir):
     results = []
     log = load_log(data_subdir)
+    log["Description"] = description
     log["Classifiers"] = list(binary_classifiers.keys())
     create_log(log, data_subdir)
 
@@ -657,8 +659,8 @@ def read_efficiency_vs_ele_PT(classifier_name, description, data_subdir):
         print(f"File {filename} not found.")
         return None, None
     
-def plot_all_results(binary_classifiers, description, data_subdir):
-    for classifier_name, Classifiers in binary_classifiers.items():
+def plot_all_results(binary_classifier_names, description, data_subdir):
+    for classifier_name in binary_classifier_names:
         fpr, tpr, roc_auc = read_roc(classifier_name, description, data_subdir)
         precision, recall, pr_auc, chance_level = read_precision_recall(classifier_name, description, data_subdir)
         bins, electrons_efficiency = read_efficiency_vs_ele_PT(classifier_name, description, data_subdir)
