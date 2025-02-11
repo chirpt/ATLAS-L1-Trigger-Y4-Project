@@ -1,0 +1,17 @@
+{
+    "test_size": 0.2,
+    "accept_data_filename": "l1calo_topocluster_test_Zee.root",
+    "reject_data_filename": "l1calo_hist_ZB_EN.root",
+    "data_subdir": "topocluster_test_Z_EN_test",
+    "format_mode": "topocluster_ET_boundaries",
+    "distance_boundaries": [
+        0.00625,
+        0.0125,
+        0.025,
+        0.05,
+        0.1,
+        0.2,
+        0.4
+    ],
+    "equalised": false
+}
