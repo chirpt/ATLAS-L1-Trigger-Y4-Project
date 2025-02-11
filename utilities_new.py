@@ -28,6 +28,8 @@ from xgboost import XGBClassifier
 #Import
 def import_data(file):
     File = uproot.open(file)
+    if "tree_DMC" not in File:
+        raise KeyError(f"'tree_DMC' not found in {file}")
     Tree = File["tree_DMC"]
     DF = Tree.arrays(library="pd")
     return DF
@@ -96,8 +98,7 @@ def import_all_classifiers():
     return binary_classifiers
 
 def visualise_ROI(dataframe_entry, isdataframe=True):
-    if isdataframe:
-        entry = ak.to_numpy(dataframe_entry)
+    entry = ak.to_numpy(dataframe_entry) if isdataframe else dataframe_entry
 
     map0 = [0,11,22,33,44,55,66,77,88]    
     map1 = [1,2,3,4,12,13,14,15,23,24,25,26,34,35,36,37,45,46,47,48,56,57,58,59,67,68,69,70,78,79,80,81,89,90,91,92]
@@ -135,17 +136,30 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
 #Prepare
 def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root",
                  data_subdir="ZMUMU_EGZ_extended_np_pd", format_mode="SuperCell_ET", get_pT=True, distance_boundaries=[0.1,0.2,0.3,0.4], equalised=False):
+    log = {"test_size": test_size, 
+           "accept_data_filename": accept_data_filename, 
+           "reject_data_filename": reject_data_filename, 
+           "data_subdir": data_subdir, 
+           "format_mode": format_mode,
+           "distance_boundaries": distance_boundaries,
+           "equalised": equalised}
     if equalised:
         data_subdir += "_equalised"
     save_path = os.path.join(os.path.pardir, "data", data_subdir)
     if os.path.exists(os.path.join(save_path, "np_data.npz")) and os.path.exists(os.path.join(save_path, "input_df.parquet")):
+        if not os.path.exists(os.path.join(save_path, "log.json")):
+            create_log(log, save_path)
+            
         print(f"found preprepared data in {save_path}")
         np_data = np.load(os.path.join(save_path, "np_data.npz"))
         input_np, labels_np = np_data["input_np"], np_data["labels_np"]
         input_df = pd.read_parquet(os.path.join(save_path, "input_df.parquet"))
 
 
+        
+
     else:
+        create_log(log, save_path)
         print(f"preprepared data in {save_path} is missing, preparing and saving here")
         accept_data_path = os.path.join(os.path.pardir, "data", accept_data_filename)
         reject_data_path = os.path.join(os.path.pardir, "data", reject_data_filename)
@@ -208,13 +222,24 @@ def format_numpy_training_input(DFs,format_mode, distance_boundaries):
 
     return np.concatenate((accepted_numpy, rejected_numpy), axis=0)
 
+def create_log(log, data_subdir):
+    os.makedirs(data_subdir, exist_ok=True)
+    
+    filepath = os.path.join(data_subdir, "log.json")
+    
+    with open(filepath, "w") as file:
+        json.dump(log, file, indent=4)
+    
+    print(f"Log saved to {filepath}")
+    
+
+
 def equalise(DFs):
-    if DFs[0].shape[0] < DFs[1].shape[0]:
-        DFs[1] = DFs[1].sample(n=DFs[0].shape[0], random_state=42).reset_index(drop=True)
-    elif DFs[0].shape[0] > DFs[1].shape[0]:
-        DFs[0] = DFs[0].sample(n=DFs[1].shape[0], random_state=42).reset_index(drop=True)
-    print("Equalised:", DFs[0].shape, DFs[1].shape)
-    return [DFs[0], DFs[1]]
+    if DFs[0].shape[0] == DFs[1].shape[0]:
+        return DFs
+
+    min_size = min(DFs[0].shape[0], DFs[1].shape[0])
+    return [df.sample(n=min_size, random_state=42).reset_index(drop=True) for df in DFs]
 
 def generate_topocluster_ET_distribution(DF, distance_boundaries):
     ET_distributions = np.empty((DF.shape[0], len(distance_boundaries)))
@@ -292,11 +317,17 @@ def visualise_topocluster_ETs(DF, num_bins):
     fig.show()
 
 #Train
-def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train, y_test, pd_passthrough_train, pd_passthrough_test, description):
+def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train, y_test, pd_passthrough_train, pd_passthrough_test, description, data_subdir):
     results = []
-    plotting_results = []
+    log = load_log(data_subdir)
+    log["Classifiers"] = list(binary_classifiers.keys())
+    create_log(log, data_subdir)
+
     for name, Classifier in tqdm(binary_classifiers.items()):
+        result_entry = {"Classifier": name}  # Store classifier results here
+
         try:
+            # Initialize classifier
             if name in [
                 "ClassifierChain",
                 "FixedThresholdClassifier",
@@ -319,71 +350,69 @@ def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train,
                     "TunedThresholdClassifierCV",
                 ]:
                     clf = Classifier(estimator=LogisticRegression())
-                elif name == "StackingClassifier":
-                    clf = Classifier(estimators=[("lr", LogisticRegression()), ("rf", RandomForestClassifier())])
-                elif name == "VotingClassifier":
+                elif name in ["StackingClassifier", "VotingClassifier"]:
                     clf = Classifier(estimators=[("lr", LogisticRegression()), ("rf", RandomForestClassifier())])
             else:
-                # Check if random_state is a parameter and set it if available
                 params = signature(Classifier).parameters
-                if "random_state" in params:
-                    clf = Classifier(random_state=42)
-                else:
-                    clf = Classifier()
+                clf = Classifier(random_state=42) if "random_state" in params else Classifier()
 
+            # Train model
             clf.fit(X_train, y_train)
+
+            # Make predictions
             y_pred = clf.predict(X_test)
             pd_passthrough_test["pred"] = y_pred
-            tn, fp, fn, tp, accuracy, recall, precision, f1, mse = evaluate_sklearn_model(y_test, y_pred, model_name=f'{name}')
-            fpr, tpr, roc_auc = compute_roc(clf, X_test, y_test)
-            precision_arr, recall_arr, pr_auc, chance_level = compute_precision_recall(clf, X_test, y_test)
-            bins, electrons_efficiency = compute_efficiency_vs_ele_PT(pd_passthrough_test, et_Low = 20, et_High = 60,prediction_parameter="pred")
-            
-            save_roc_data(fpr, tpr, roc_auc, f'{name}', description)
-            save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, chance_level, f'{name}')
-            save_efficiency_vs_ele_PT(bins, electrons_efficiency, f'{name}', description)
-            
-            # plot_roc(fpr, tpr, roc_auc, f'{name}')
-            # plot_precision_recall(precision_arr, recall_arr, pr_auc, chance_level, f'{name}')
-            # plot_efficiency_vs_ele_PT(bins, electrons_efficiency, f'{name}')
-            
-            # Save results
-            results.append({
-                "Classifier": name,
-                "Accuracy": accuracy,
-                "TN": tn,
-                "FP": fp,
-                "FN": fn,
-                "TP": tp,
-                "Recall": recall,
-                "Precision": precision,
-                "F1": f1,
-                "MSE": mse
-            })
-            plotting_results.append({
-                "Classifier": name,
-            })
-            
 
         except Exception as e:
-            # On error, save classifier name with NULL values
-            print(f"Could not evaluate {name}: {e}\n")
-            results.append({
-                "Classifier": name,
-                "Accuracy": "NULL",
-                "TN": "NULL",
-                "FP": "NULL",
-                "FN": "NULL",
-                "TP": "NULL",
-                "Recall": "NULL",
-                "Precision": "NULL",
-                "F1": "NULL",
-                "MSE": "NULL"
-                })
+            print(f"Could not train or predict with {name}: {e}")
+            result_entry.update({key: "NULL" for key in ["Accuracy", "TN", "FP", "FN", "TP", "Recall", "Precision", "F1", "MSE"]})
+            results.append(result_entry)
+            continue  # Skip to the next classifier
+
+        # Compute evaluation metrics, wrapping each in try-except
+        try:
+            tn, fp, fn, tp, accuracy, recall, precision, f1, mse = evaluate_sklearn_model(y_test, y_pred, classifier_name=f'{name}')
+            result_entry.update({"Accuracy": accuracy, "TN": tn, "FP": fp, "FN": fn, "TP": tp, "Recall": recall, "Precision": precision, "F1": f1, "MSE": mse})
+        except Exception as e:
+            print(f"Failed evaluation metrics for {name}: {e}")
+            result_entry.update({"Accuracy": "NULL", "TN": "NULL", "FP": "NULL", "FN": "NULL", "TP": "NULL", "Recall": "NULL", "Precision": "NULL", "F1": "NULL", "MSE": "NULL"})
+
+        try:
+            fpr, tpr, roc_auc = compute_roc(clf, X_test, y_test)
+            save_roc_data(fpr, tpr, roc_auc, description, f'{name}', data_subdir)
+        except Exception as e:
+            print(f"Failed ROC computation for {name}: {e}")
+
+        try:
+            precision_arr, recall_arr, pr_auc, chance_level = compute_precision_recall(clf, X_test, y_test)
+            save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, chance_level, f'{name}', data_subdir)
+        except Exception as e:
+            print(f"Failed Precision-Recall computation for {name}: {e}")
+
+        try:
+            bins, electrons_efficiency = compute_efficiency_vs_ele_PT(pd_passthrough_test, et_Low=20, et_High=60, prediction_parameter="pred")
+            save_efficiency_vs_ele_PT(bins, electrons_efficiency, description, f'{name}', data_subdir)
+        except Exception as e:
+            print(f"Failed Efficiency vs Ele PT computation for {name}: {e}")
+
+        results.append(result_entry)
+
+    save_csv(description, results, data_subdir)
     return results
 
-def save_csv(output_file, results):
+def load_log(data_subdir):
+    log_file = os.path.join(os.path.pardir, "data", data_subdir, "log.json")
     
+    if os.path.exists(log_file):
+        print(f"found data preparation log in {log_file}")
+    if not os.path.exists(log_file):
+        raise FileNotFoundError(f"Log file not found: {log_file}")
+    with open(log_file, "r") as file:
+        log = json.load(file)
+    return log
+
+def save_csv(description, results, data_subdir):
+    output_file = f"{data_subdir}/{data_subdir}_{description}_all.csv"
     with open(output_file, mode="w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=["Classifier", "Accuracy", "TN", "FP", "FN", "TP", "Precision", "Recall", "F1", "MSE"])
         writer.writeheader()
@@ -392,14 +421,14 @@ def save_csv(output_file, results):
     print(f"Results saved to {output_file}")
 
 #Evaluate
-def evaluate_sklearn_model(y_test, y_pred, get_recall=True, get_precision=True, get_f1=True, show_CR=True, show_MSE=True, model_name=None):
+def evaluate_sklearn_model(y_test, y_pred, get_recall=True, get_precision=True, get_f1=True, show_CR=True, show_MSE=True, classifier_name=None):
     recall = None
     precision = None
     f1 = None
     mse = None
     
-    if model_name != None:
-        print("Evaluation of " + model_name)
+    if classifier_name != None:
+        print("\n\nEvaluation of " + classifier_name)
     
     tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
     print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
@@ -444,7 +473,9 @@ def compute_roc(model, X_test, y_test):
     if hasattr(model, "decision_function"):  # For models like SVM or SGD
         y_scores = model.decision_function(X_test)
     elif hasattr(model, "predict_proba"):  # For models like XGBoost or other tree-based models
-        y_scores = model.predict_proba(X_test)[:, 1]
+        probs = model.predict_proba(X_test)
+        y_scores = probs[:, 1] if probs.shape[1] > 1 else probs[:, 0]
+
     else:
         raise ValueError("Model must have either a decision_function or predict_proba method.")
     
@@ -452,13 +483,13 @@ def compute_roc(model, X_test, y_test):
     roc_auc = auc(fpr, tpr)
     return fpr, tpr, roc_auc
 
-def plot_roc(fpr, tpr, roc_auc, classifier_name):
+def plot_roc(fpr, tpr, roc_auc, classifier_name, description):
     plt.figure()
     plt.plot(fpr, tpr, color='darkorange', lw=2, label=f"ROC curve (AUC = {roc_auc:.8f})")
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title(f'Receiver Operating Characteristic - {classifier_name}')
+    plt.title(f'Receiver Operating Characteristic {description} - {classifier_name}')
     plt.legend(loc="lower right")
     plt.show()
     
@@ -476,7 +507,7 @@ def compute_precision_recall(model, X_test, y_test):
     
     return precision, recall, pr_auc, chance_level
 
-def plot_precision_recall(precision, recall, pr_auc, classifier_name, chance_level=None, plot_chance_level=False):
+def plot_precision_recall(precision, recall, pr_auc, classifier_name, description, chance_level=None, plot_chance_level=False):
     plt.figure()
     plt.plot(recall, precision, color='blue', lw=2, label=f"Precision-Recall curve (AUC = {pr_auc:.8f})")
 
@@ -487,20 +518,24 @@ def plot_precision_recall(precision, recall, pr_auc, classifier_name, chance_lev
     
     plt.xlabel('Recall')
     plt.ylabel('Precision')
-    plt.title(f'Precision-Recall Curve - {classifier_name}')
+    plt.title(f'Precision-Recall Curve {description} - {classifier_name}')
     plt.legend(loc="lower right")
     plt.show()
     
 def compute_efficiency_vs_ele_PT(X_test_all, et_Low = 20, et_High = 60, prediction_parameter="pred"):
     electrons_all,bins, _ = plt.hist( X_test_all.query("Label == 1")["offline_ele_pt"], bins=40, alpha=0.6, range=[et_Low, et_High])
     electrons_all_tagged, bins,_ = plt.hist( X_test_all.query(f"Label == 1 & {prediction_parameter} == 1")["offline_ele_pt"], bins=40, alpha=0.6, range=[et_Low, et_High])
-    electrons_efficiency = electrons_all_tagged/electrons_all
+    electrons_efficiency = np.divide(
+        electrons_all_tagged, electrons_all, 
+        out=np.zeros_like(electrons_all, dtype=float), 
+        where=electrons_all != 0
+    )
     plt.clf()
     return bins, electrons_efficiency
 
-def plot_efficiency_vs_ele_PT(bins, electrons_efficiency, title_string):
+def plot_efficiency_vs_ele_PT(bins, electrons_efficiency, classifier_name, description):
     plt.bar(bins[:-1], electrons_efficiency, width = np.diff(bins), align='edge', edgecolor='black')
-    plt.title(f'Efficiency against electron PT: {title_string}')
+    plt.title(f'Efficiency against electron PT {description} - {classifier_name}')
     plt.xlabel('Offline electron pt (GeV)')
     plt.ylabel('Efficiency')
     plt.xlim(bins[0], bins[-1])
@@ -543,23 +578,23 @@ def multi_roc_multi_data_single_plot(classifiers, X_tests, y_tests,filename):
     plt.savefig(filename, dpi=400, bbox_inches='tight')
     plt.show()
     
-def save_roc_data(fpr, tpr, roc_auc, model_name, description):
+def save_roc_data(fpr, tpr, roc_auc, description, classifier_name, data_subdir):
     data = {
         "False Positive Rate": fpr.tolist(),
         "True Positive Rate": tpr.tolist(),
         "ROC AUC": roc_auc
     }
     
-    directory = "roc"
+    directory = os.path.join(data_subdir, "roc")
     os.makedirs(directory, exist_ok=True)
     
-    filename = os.path.join(directory, f"roc_data_{description}_{model_name}.json")
+    filename = os.path.join(directory, f"roc_{description}_{classifier_name}.json")
     with open(filename, "w") as file:
         json.dump(data, file, indent=4)
     
     print(f"ROC data saved to {filename}")
 
-def save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, chance_level, model_name):
+def save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, chance_level, classifier_name, data_subdir):
     data = {
         "Precision": precision_arr.tolist(),
         "Recall": recall_arr.tolist(),
@@ -567,33 +602,33 @@ def save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, c
         "Chance Level": chance_level
     }
 
-    directory = "precision_recall"
+    directory = os.path.join(data_subdir, "precision_recall")
     os.makedirs(directory, exist_ok=True)
 
-    filename = os.path.join(directory, f"precision_recall_data_{description}_{model_name}.json")
+    filename = os.path.join(directory, f"precision_recall_{description}_{classifier_name}.json")
     with open(filename, "w") as file:
         json.dump(data, file, indent=4)
 
     print(f"Precision-Recall data saved to {filename}")
 
-def save_efficiency_vs_ele_PT(bins, electrons_efficiency, description, model_name):
+def save_efficiency_vs_ele_PT(bins, electrons_efficiency, description, classifier_name, data_subdir):
     data = {
         "Bins": bins.tolist(),
         "Efficiency": electrons_efficiency.tolist()
     }
 
-    directory = "efficiency_vs_ele_pt"
+    directory = os.path.join(data_subdir, "efficiency_vs_ele_pt")
     os.makedirs(directory, exist_ok=True)
 
-    filename = os.path.join(directory, f"efficiency_vs_ele_pt_{description}_{model_name}.json")
+    filename = os.path.join(directory, f"efficiency_vs_ele_pt_{description}_{classifier_name}.json")
     with open(filename, "w") as file:
         json.dump(data, file, indent=4)
 
     print(f"Efficiency vs Electron PT data saved to {filename}")
     
 #Read
-def read_roc(model_name, description):
-    filename = f"roc_data_{description}_{model_name}.json"
+def read_roc(classifier_name, description, data_subdir):
+    filename = os.path.join(data_subdir, "roc", f"roc_{description}_{classifier_name}.json")
     try:
         with open(filename, "r") as file:
             data = json.load(file)
@@ -602,8 +637,8 @@ def read_roc(model_name, description):
         print(f"File {filename} not found.")
         return None, None, None
 
-def read_precision_recall(model_name, description):
-    filename = f"precision_recall_data_{description}_{model_name}.json"
+def read_precision_recall(classifier_name, description, data_subdir):
+    filename = os.path.join(data_subdir, "precision_recall", f"precision_recall_{description}_{classifier_name}.json")
     try:
         with open(filename, "r") as file:
             data = json.load(file)
@@ -612,8 +647,8 @@ def read_precision_recall(model_name, description):
         print(f"File {filename} not found.")
         return None, None, None, None
 
-def read_efficiency_vs_ele_PT(model_name, description):
-    filename = f"efficiency_vs_ele_PT_{description}_{model_name}.json"
+def read_efficiency_vs_ele_PT(classifier_name, description, data_subdir):
+    filename = os.path.join(data_subdir, "efficiency_vs_ele_PT", f"efficiency_vs_ele_pt_{description}_{classifier_name}.json")
     try:
         with open(filename, "r") as file:
             data = json.load(file)
@@ -622,11 +657,11 @@ def read_efficiency_vs_ele_PT(model_name, description):
         print(f"File {filename} not found.")
         return None, None
     
-def plot_all_results(binary_classifiers, description):
+def plot_all_results(binary_classifiers, description, data_subdir):
     for classifier_name, Classifiers in binary_classifiers.items():
-        fpr, tpr, roc_auc = read_roc(classifier_name, description)
-        precision, recall, pr_auc, chance_level = read_precision_recall(classifier_name, description)
-        bins, electrons_efficiency = read_efficiency_vs_ele_PT(classifier_name, description)
+        fpr, tpr, roc_auc = read_roc(classifier_name, description, data_subdir)
+        precision, recall, pr_auc, chance_level = read_precision_recall(classifier_name, description, data_subdir)
+        bins, electrons_efficiency = read_efficiency_vs_ele_PT(classifier_name, description, data_subdir)
         
         if fpr is not None and tpr is not None and roc_auc is not None:
             plot_roc(fpr, tpr, roc_auc, classifier_name, description)
