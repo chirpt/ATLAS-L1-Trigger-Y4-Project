@@ -1,0 +1,14 @@
+{
+    "test_size": 0.2,
+    "accept_data_filename": "l1calo_hist_EGZ_extended.root",
+    "reject_data_filename": "l1calo_hist_ZMUMU_extended.root",
+    "data_subdir": "ZMUMU_EGZ_original_eFEX_iso",
+    "format_mode": "iso_vars",
+    "distance_boundaries": [
+        0.1,
+        0.2,
+        0.3,
+        0.4
+    ],
+    "equalised": false
+}
