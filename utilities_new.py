@@ -9,6 +9,7 @@ import pandas as pd
 import awkward as ak
 
 from tqdm.auto import tqdm
+from datetime import datetime
 from inspect import signature
 
 import plotly.express as px
@@ -136,15 +137,17 @@ def visualise_ROI(dataframe_entry, isdataframe=True):
 #Prepare
 def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root",
                  data_subdir="ZMUMU_EGZ_extended_np_pd", format_mode="SuperCell_ET", get_pT=True, distance_boundaries=[0.1,0.2,0.3,0.4], equalised=False):
-    log = {"test_size": test_size, 
+    log = {"data_prep_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+           "test_size": test_size, 
            "accept_data_filename": accept_data_filename, 
            "reject_data_filename": reject_data_filename, 
            "data_subdir": data_subdir, 
            "format_mode": format_mode,
            "distance_boundaries": distance_boundaries,
-           "equalised": equalised}
-    if equalised:
-        data_subdir += "_equalised"
+           "equalised": equalised
+           }
+    # if equalised:
+    #     data_subdir += "_equalised"
     save_path = os.path.join(os.path.pardir, "data", data_subdir)
     if os.path.exists(os.path.join(save_path, "np_data.npz")) and os.path.exists(os.path.join(save_path, "input_df.parquet")):
         if not os.path.exists(os.path.join(save_path, "log.json")):
@@ -323,6 +326,7 @@ def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train,
     log = load_log(data_subdir)
     log["Description"] = description
     log["Classifiers"] = list(binary_classifiers.keys())
+    log["Model_train_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     create_log(log, data_subdir)
 
     for name, Classifier in tqdm(binary_classifiers.items()):
