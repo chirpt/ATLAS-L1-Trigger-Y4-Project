@@ -156,10 +156,7 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
         print(f"found preprepared data in {save_path}")
         np_data = np.load(os.path.join(save_path, "np_data.npz"))
         input_np, labels_np = np_data["input_np"], np_data["labels_np"]
-        input_df = pd.read_parquet(os.path.join(save_path, "input_df.parquet"))
-
-
-        
+        input_df = pd.read_parquet(os.path.join(save_path, "input_df.parquet")) 
 
     else:
         create_log(log, save_path)
@@ -236,8 +233,6 @@ def create_log(log, data_subdir):
     
     print(f"Log saved to {filepath}")
     
-
-
 def equalise(DFs):
     if DFs[0].shape[0] == DFs[1].shape[0]:
         return DFs
