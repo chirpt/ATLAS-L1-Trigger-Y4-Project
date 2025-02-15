@@ -1,12 +1,14 @@
 import os
 import csv
 import json
+import time
 import math
 import pickle
 import uproot
 import numpy as np
 import pandas as pd
 import awkward as ak
+import multiprocessing
 
 from tqdm.auto import tqdm
 from datetime import datetime
@@ -315,7 +317,22 @@ def visualise_topocluster_ETs(DF, num_bins):
 
     fig.show()
 
-#Train
+def train_with_timeout(clf, X_train, y_train, timeout=3):
+    """Runs classifier fitting with a timeout."""
+    def target():
+        clf.fit(X_train, y_train)
+    
+    process = multiprocessing.Process(target=target)
+    process.start()
+    process.join(timeout)
+    
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        return False
+    return True
+
+
 def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train, y_test, pd_passthrough_train, pd_passthrough_test, description, data_subdir):
     results = []
     log = load_log(data_subdir)
@@ -325,81 +342,98 @@ def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train,
     create_log(log, data_subdir)
 
     for name, Classifier in tqdm(binary_classifiers.items()):
-        result_entry = {"Classifier": name}  # Store classifier results here
+        # condition = os.path.exists(os.path.join(os.path.join(data_subdir, "efficiency_vs_ele_pt"), f"efficiency_vs_ele_pt_{description}_{f'{name}'}.json"))
+        results_found = False
+        csv_file = os.path.join(data_subdir, f"{data_subdir}_{description}_all.csv")
+        if os.path.exists(csv_file):
+            with open(csv_file, mode="r", newline="") as file:
+                existing_results = list(csv.DictReader(file))
+                if any(row["Classifier"] == name for row in existing_results):
+                    results_found = True
 
-        try:
-            # Initialize classifier
-            if name in [
-                "ClassifierChain",
-                "FixedThresholdClassifier",
-                "MultiOutputClassifier",
-                "OneVsOneClassifier",
-                "OneVsRestClassifier",
-                "OutputCodeClassifier",
-                "StackingClassifier",
-                "TunedThresholdClassifierCV",
-                "VotingClassifier",
-            ]:
-                if name == "ClassifierChain":
-                    clf = Classifier(base_estimator=LogisticRegression())
-                elif name in [
+        if not results_found:
+            result_entry = {"Classifier": name}  # Store classifier results here
+
+            try:
+                # Initialize classifier
+                if name in [
+                    "ClassifierChain",
+                    "FixedThresholdClassifier",
                     "MultiOutputClassifier",
                     "OneVsOneClassifier",
                     "OneVsRestClassifier",
                     "OutputCodeClassifier",
-                    "FixedThresholdClassifier",
+                    "StackingClassifier",
                     "TunedThresholdClassifierCV",
+                    "VotingClassifier",
                 ]:
-                    clf = Classifier(estimator=LogisticRegression())
-                elif name in ["StackingClassifier", "VotingClassifier"]:
-                    clf = Classifier(estimators=[("lr", LogisticRegression()), ("rf", RandomForestClassifier())])
-            else:
-                params = signature(Classifier).parameters
-                clf = Classifier(random_state=42) if "random_state" in params else Classifier()
+                    if name == "ClassifierChain":
+                        clf = Classifier(base_estimator=LogisticRegression())
+                    elif name in [
+                        "MultiOutputClassifier",
+                        "OneVsOneClassifier",
+                        "OneVsRestClassifier",
+                        "OutputCodeClassifier",
+                        "FixedThresholdClassifier",
+                        "TunedThresholdClassifierCV",
+                    ]:
+                        clf = Classifier(estimator=LogisticRegression())
+                    elif name in ["StackingClassifier", "VotingClassifier"]:
+                        clf = Classifier(estimators=[("lr", LogisticRegression()), ("rf", RandomForestClassifier())])
+                else:
+                    params = signature(Classifier).parameters
+                    clf = Classifier(random_state=42) if "random_state" in params else Classifier()
 
-            # Train model
-            clf.fit(X_train, y_train)
+                print(f"Training {name}...")
+                start = time.time()
+                # Train model
+                clf.fit(X_train, y_train)
+                print("Took:", time.time() - start, "seconds\npredicting...")
+                start = time.time()
+                # Make predictions
+                y_pred = clf.predict(X_test)
+                print("Took:", time.time() - start, "seconds")
+                pd_passthrough_test["pred"] = y_pred
 
-            # Make predictions
-            y_pred = clf.predict(X_test)
-            pd_passthrough_test["pred"] = y_pred
+            except Exception as e:
+                print(f"Could not train or predict with {name}: {e}")
+                result_entry.update({key: "NULL" for key in ["Accuracy", "TN", "FP", "FN", "TP", "Recall", "Precision", "F1", "MSE"]})
+                results.append(result_entry)
+                continue  # Skip to the next classifier
 
-        except Exception as e:
-            print(f"Could not train or predict with {name}: {e}")
-            result_entry.update({key: "NULL" for key in ["Accuracy", "TN", "FP", "FN", "TP", "Recall", "Precision", "F1", "MSE"]})
+            # Compute evaluation metrics, wrapping each in try-except
+            try:
+                tn, fp, fn, tp, accuracy, recall, precision, f1, mse = evaluate_sklearn_model(y_test, y_pred, classifier_name=f'{name}')
+                result_entry.update({"Accuracy": accuracy, "TN": tn, "FP": fp, "FN": fn, "TP": tp, "Recall": recall, "Precision": precision, "F1": f1, "MSE": mse})
+            except Exception as e:
+                print(f"Failed evaluation metrics for {name}: {e}")
+                result_entry.update({"Accuracy": "NULL", "TN": "NULL", "FP": "NULL", "FN": "NULL", "TP": "NULL", "Recall": "NULL", "Precision": "NULL", "F1": "NULL", "MSE": "NULL"})
+
+            try:
+                fpr, tpr, roc_auc = compute_roc(clf, X_test, y_test)
+                save_roc_data(fpr, tpr, roc_auc, description, f'{name}', data_subdir)
+            except Exception as e:
+                print(f"Failed ROC computation for {name}: {e}")
+
+            try:
+                precision_arr, recall_arr, pr_auc, chance_level = compute_precision_recall(clf, X_test, y_test)
+                save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, chance_level, f'{name}', data_subdir)
+            except Exception as e:
+                print(f"Failed Precision-Recall computation for {name}: {e}")
+
+            try:
+                bins, electrons_efficiency = compute_efficiency_vs_ele_PT(pd_passthrough_test, et_Low=20, et_High=60, prediction_parameter="pred")
+                save_efficiency_vs_ele_PT(bins, electrons_efficiency, description, f'{name}', data_subdir)
+            except Exception as e:
+                print(f"Failed Efficiency vs Ele PT computation for {name}: {e}")
+
             results.append(result_entry)
-            continue  # Skip to the next classifier
-
-        # Compute evaluation metrics, wrapping each in try-except
-        try:
-            tn, fp, fn, tp, accuracy, recall, precision, f1, mse = evaluate_sklearn_model(y_test, y_pred, classifier_name=f'{name}')
-            result_entry.update({"Accuracy": accuracy, "TN": tn, "FP": fp, "FN": fn, "TP": tp, "Recall": recall, "Precision": precision, "F1": f1, "MSE": mse})
-        except Exception as e:
-            print(f"Failed evaluation metrics for {name}: {e}")
-            result_entry.update({"Accuracy": "NULL", "TN": "NULL", "FP": "NULL", "FN": "NULL", "TP": "NULL", "Recall": "NULL", "Precision": "NULL", "F1": "NULL", "MSE": "NULL"})
-
-        try:
-            fpr, tpr, roc_auc = compute_roc(clf, X_test, y_test)
-            save_roc_data(fpr, tpr, roc_auc, description, f'{name}', data_subdir)
-        except Exception as e:
-            print(f"Failed ROC computation for {name}: {e}")
-
-        try:
-            precision_arr, recall_arr, pr_auc, chance_level = compute_precision_recall(clf, X_test, y_test)
-            save_precision_recall_data(precision_arr, recall_arr, pr_auc, description, chance_level, f'{name}', data_subdir)
-        except Exception as e:
-            print(f"Failed Precision-Recall computation for {name}: {e}")
-
-        try:
-            bins, electrons_efficiency = compute_efficiency_vs_ele_PT(pd_passthrough_test, et_Low=20, et_High=60, prediction_parameter="pred")
-            save_efficiency_vs_ele_PT(bins, electrons_efficiency, description, f'{name}', data_subdir)
-        except Exception as e:
-            print(f"Failed Efficiency vs Ele PT computation for {name}: {e}")
-
-        results.append(result_entry)
+        else:
+            print(f"Results for {name} already exist in {data_subdir}")
 
     save_csv(description, results, data_subdir)
     return results
+
 
 def load_log(data_subdir):
     log_file = os.path.join(os.path.pardir, "data", data_subdir, "log.json")
@@ -414,10 +448,26 @@ def load_log(data_subdir):
 
 def save_csv(description, results, data_subdir):
     output_file = f"{data_subdir}/{data_subdir}_{description}_all.csv"
+    if os.path.exists(output_file):
+        with open(output_file, mode="r", newline="") as file:
+            existing_results = list(csv.DictReader(file))
+        
+        # Convert to dictionary with classifier names as keys for easy updating
+        existing_results_dict = {row["Classifier"]: row for row in existing_results}
+        
+        # Update existing results with new results
+        for result in results:
+            existing_results_dict[result["Classifier"]] = result
+        
+        # Convert back to list and sort by classifier name
+        updated_results = sorted(existing_results_dict.values(), key=lambda x: x["Classifier"])
+    else:
+        updated_results = sorted(results, key=lambda x: x["Classifier"])
+
     with open(output_file, mode="w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=["Classifier", "Accuracy", "TN", "FP", "FN", "TP", "Precision", "Recall", "F1", "MSE"])
         writer.writeheader()
-        writer.writerows(results)
+        writer.writerows(updated_results)
 
     print(f"Results saved to {output_file}")
 
