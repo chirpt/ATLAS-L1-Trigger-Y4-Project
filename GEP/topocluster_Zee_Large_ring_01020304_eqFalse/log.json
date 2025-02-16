@@ -41,7 +41,6 @@
         "MultiOutputClassifier",
         "MultinomialNB",
         "NearestCentroid",
-        "NuSVC",
         "OneVsOneClassifier",
         "OneVsRestClassifier",
         "OutputCodeClassifier",
@@ -53,10 +52,9 @@
         "RidgeClassifier",
         "RidgeClassifierCV",
         "SGDClassifier",
-        "SVC",
         "TunedThresholdClassifierCV",
         "VotingClassifier",
         "XGBClassifier"
     ],
-    "Model_train_time": "2025-02-11 23:56:23"
+    "Model_train_time": "2025-02-16 16:38:50"
 }
