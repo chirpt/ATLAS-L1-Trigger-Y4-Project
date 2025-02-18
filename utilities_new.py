@@ -221,6 +221,17 @@ def format_numpy_training_input(DFs,format_mode, distance_boundaries):
         print("attempting to generate topo training data")
         accepted_numpy = generate_topocluster_ET_distribution(DFs[0], distance_boundaries)
         rejected_numpy = generate_topocluster_ET_distribution(DFs[1], distance_boundaries)
+        
+    elif format_mode == "iso_vars_topocluster_ET_boundaries":
+        print("attempting to generate topo training data with iso vars")
+        columns = ["eFEX_ReC", "eFEX_ReE", "eFEX_RhE", "eFEX_RhH", "eFEX_WsN", "eFEX_WsD"]
+        accepted_numpy = DFs[0][columns].to_numpy(dtype=np.float32)
+        rejected_numpy = DFs[1][columns].to_numpy(dtype=np.float32)
+        accepted_topocluster_ETs = generate_topocluster_ET_distribution(DFs[0], distance_boundaries)
+        rejected_topocluster_ETs = generate_topocluster_ET_distribution(DFs[1], distance_boundaries)
+        accepted_numpy = np.concatenate((accepted_numpy, accepted_topocluster_ETs), axis=1)
+        rejected_numpy = np.concatenate((rejected_numpy, rejected_topocluster_ETs), axis=1)
+
 
 
     return np.concatenate((accepted_numpy, rejected_numpy), axis=0)
