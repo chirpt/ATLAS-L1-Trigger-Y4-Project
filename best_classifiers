@@ -1,0 +1,66 @@
+import os
+import glob
+import pandas as pd
+import numpy as np
+
+def process_csv(file_path):
+    """Processes a CSV file and saves the Pareto-optimal classifiers."""
+
+    if "Results" in os.path.normpath(file_path).split(os.sep) or file_path.endswith("_pareto_optimal.csv"):
+        print(f"Skipping: {file_path} (either inside 'Results' directory or already processed)")
+        return
+
+    # Load CSV file
+    df = pd.read_csv(file_path)
+
+    df = df.dropna()
+
+    metrics = ["Accuracy", "Precision", "Recall", "F1", "MSE", "FP", "FN"]
+    for col in metrics:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    maximize = ["Accuracy", "Precision", "Recall", "F1"]  # Metrics to maximize
+    minimize = ["MSE", "FP", "FN"]  # Metrics to minimize
+
+    df[minimize] = -df[minimize]  # Flip sign of minimizing metrics
+
+    def is_pareto_efficient(costs):
+        """Returns a boolean array indicating which points are Pareto efficient."""
+        is_efficient = np.ones(costs.shape[0], dtype=bool)
+        for i, c in enumerate(costs):
+            if is_efficient[i]:
+                is_efficient[is_efficient] = np.any(costs[is_efficient] > c, axis=1)
+                is_efficient[i] = True  # Keep the current point
+        return is_efficient
+
+    cost_matrix = df[maximize + minimize].to_numpy()
+
+    pareto_mask = is_pareto_efficient(cost_matrix)
+    pareto_df = df[pareto_mask]
+
+    pareto_df = pareto_df.sort_values(by="Accuracy", ascending=False)
+
+    top_classifiers = pareto_df.head(6)
+
+    print(f"\nTop Pareto-Optimal Classifiers for {file_path}:")
+    print(top_classifiers)
+
+    # Define output file path
+    output_dir = os.path.dirname(file_path)
+    output_file = os.path.join(output_dir, os.path.splitext(os.path.basename(file_path))[0] + "_pareto_optimal.csv")
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Save results to CSV
+    top_classifiers.to_csv(output_file, index=False)
+    print(f"Saved results to: {output_file}")
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
+csv_files = [
+    f for f in glob.glob(os.path.join(base_dir, "**", "*.csv"), recursive=True)
+    if "Results" not in os.path.normpath(f).split(os.sep) and not f.endswith("_pareto_optimal.csv")
+]
+
+for csv_file in csv_files:
+    process_csv(csv_file)
