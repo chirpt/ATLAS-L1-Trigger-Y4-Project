@@ -1,0 +1,19 @@
+{
+    "data_prep_time": "2025-02-18 02:23:01",
+    "test_size": 0.2,
+    "accept_data_filename": "l1calo_topocluster_test_Zee.root",
+    "reject_data_filename": "ZMUMU_TopoCluster_Supercell_Large.root",
+    "data_subdir": "iso_topocluster_Zee_Large_ring_00501015020250303504_eqFalse",
+    "format_mode": "iso_vars_topocluster_ET_boundaries",
+    "distance_boundaries": [
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4
+    ],
+    "equalised": false
+}
