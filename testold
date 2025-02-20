@@ -1,0 +1,256 @@
+from sklearn.utils import all_estimators
+from sklearn.base import ClassifierMixin
+from sklearn.linear_model import LogisticRegression
+from utilities import *
+from xgboost import XGBClassifier
+from inspect import signature
+import csv
+from sklearn.metrics import accuracy_score, mean_squared_error, confusion_matrix
+import os
+import pickle
+import uproot
+import pandas as pd
+import numpy as np
+import uproot
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import plotly.express as px
+import awkward as ak
+import math
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, roc_curve, auc, PrecisionRecallDisplay, recall_score, precision_score, f1_score
+import plotly.graph_objects as go
+from tqdm.auto import tqdm
+
+def import_data(file):
+    File = uproot.open(file)
+    Tree = File["tree_DMC"]
+    DF = Tree.arrays(library="pd")
+    return DF
+
+def import_data_files(data_filenames):
+    data_files = []
+    for data_filename in data_filenames:
+        data_files.append(import_data(data_filename))
+    return data_files
+
+
+def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.root", reject_data_filename="l1calo_hist_ZMUMU_extended.root",
+                 data_subdir="ZMUMU_EGZ_extended_np_pd", format_mode="SuperCell_ET", get_pT=True, distance_boundaries=[0.1,0.2,0.3,0.4],equalised=False):
+    if equalised:
+        data_subdir += "_equalised"
+    save_path = os.path.join(os.path.pardir, "data", data_subdir)
+    if os.path.exists(os.path.join(save_path,"np_data.npz")) and os.path.exists(os.path.join(save_path,"input_df.parquet")):
+        print(f"found preprepared data in {save_path}")
+        np_data = np.load(os.path.join(save_path,"np_data.npz"))
+        input_np, labels_np = np_data["input_np"], np_data["labels_np"]
+        input_df = pd.read_parquet(os.path.join(save_path,"input_df.parquet"))
+
+
+    else:
+        print(f"preprepared data in {save_path} is missing, preparing and saving here")
+        accept_data_path= os.path.join(os.path.pardir, "data", accept_data_filename)
+        reject_data_path= os.path.join(os.path.pardir, "data", reject_data_filename)
+        DFs = import_data_files([accept_data_path, reject_data_path])
+        if equalised:
+            DFs = equalise(DFs)
+
+
+        accepted_labels = np.ones(DFs[0].shape[0])
+        rejected_labels = np.zeros(DFs[1].shape[0])
+        accepted_df = pd.DataFrame({'offline_ele_pt': DFs[0]['offline_ele_pt'],'Label': 1})
+        rejected_df = pd.DataFrame({'offline_ele_pt': DFs[1]['offline_ele_pt'],'Label': 0})
+
+        input_np = format_numpy_training_input(DFs,format_mode,distance_boundaries)
+        input_df = pd.concat([accepted_df,rejected_df]).reset_index(drop=True)
+        labels_np = np.concatenate((accepted_labels, rejected_labels), axis=0)
+        
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+        np.savez(os.path.join(save_path,"np_data.npz"), input_np=input_np,labels_np=labels_np)
+        input_df.to_parquet(os.path.join(save_path,"input_df.parquet"), index=False)
+
+    if get_pT == True:
+        X_train, X_test, pd_passthrough_train, pd_passthrough_test, y_train, y_test = train_test_split(input_np, input_df, labels_np, test_size=test_size, random_state=42)
+        return X_train, X_test, y_train, y_test, pd_passthrough_train, pd_passthrough_test
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(input_np, labels_np, test_size=test_size, random_state=42)
+        return X_train, X_test, y_train, y_test
+    
+def format_numpy_training_input(DFs,format_mode,distance_boundaries):
+    if format_mode == "SuperCell_ET":
+        accepted_numpy = ak.to_numpy(DFs[0]['SuperCell_ET'])
+        rejected_numpy = ak.to_numpy(DFs[1]['SuperCell_ET'])
+        
+    elif format_mode == "iso_vars":
+        columns = ["eFEX_ReC", "eFEX_ReE", "eFEX_RhE", "eFEX_RhH", "eFEX_WsN", "eFEX_WsD"]
+        accepted_numpy = DFs[0][columns].to_numpy(dtype=np.float32)
+        rejected_numpy = DFs[1][columns].to_numpy(dtype=np.float32)
+
+    elif format_mode == "reduced_SuperCell_ET":
+        full_accepted_numpy = ak.to_numpy(DFs[0]['SuperCell_ET'])
+        full_rejected_numpy = ak.to_numpy(DFs[1]['SuperCell_ET'])
+        accepted_seed_indices = np.argmax(full_accepted_numpy[:, 49:52 + 1], axis=1) + 49
+        rejected_seed_indices = np.argmax(full_rejected_numpy[:, 49:52 + 1], axis=1) + 49
+
+        delete_indices = {
+        49: [24, 25, 26, 28, 29, 30, 57, 58, 59, 61, 62, 63, 90, 91, 92, 94, 95, 96],  # Indices to delete for 49
+        50: [1, 5, 25, 26, 29, 30, 34, 38, 58, 59, 62, 63, 67, 71, 91, 92, 95, 96],  # Indices to delete for 50
+        51: [1, 2, 5, 6, 26, 30, 34, 35, 38, 39, 59, 63, 67, 68, 71, 72, 92, 96],  # Indices to delete for 51
+        52: [1, 2, 3, 5, 6, 7, 34, 35, 36, 38, 39, 40, 67, 68, 69, 71, 72, 73]}   # Indices to delete for 52
+
+        accepted_numpy = np.array([np.delete(row, delete_indices[cond]) for row, cond in zip(full_accepted_numpy, accepted_seed_indices)])
+        rejected_numpy = np.array([np.delete(row, delete_indices[cond]) for row, cond in zip(full_rejected_numpy, rejected_seed_indices)])
+    
+    elif format_mode == "topocluster_ET_boundaries":
+        print("attempting to generate topo training data")
+        accepted_numpy = generate_topocluster_ET_distribution(DFs[0],distance_boundaries)
+        rejected_numpy = generate_topocluster_ET_distribution(DFs[1],distance_boundaries)
+
+
+    return np.concatenate((accepted_numpy, rejected_numpy), axis=0)
+    
+def equalise(DFs):
+    if DFs[0].shape[0] < DFs[1].shape[0]:
+        DFs[1] = DFs[1].sample(n=DFs[0].shape[0], random_state=42).reset_index(drop=True)
+    elif DFs[0].shape[0] > DFs[1].shape[0]:
+        DFs[0] = DFs[0].sample(n=DFs[1].shape[0], random_state=42).reset_index(drop=True)
+    print("Equalised:", DFs[0].shape, DFs[1].shape)
+    return [DFs[0], DFs[1]]
+
+def generate_topocluster_ET_distribution(DF,distance_boundaries):
+    ET_distributions = np.empty((DF.shape[0],len(distance_boundaries)))
+    for i in tqdm(range(DF.shape[0])):
+        entry = DF.loc[i]
+        TopoCluster_ETs = entry["TopoCluster_ET"]
+        TopoCluster_etas = entry["TopoCluster_eta"]
+        TopoCluster_phis = entry["TopoCluster_phi"]
+        if sum(TopoCluster_ETs) > 0:
+            barycentre = calculate_topo_barycentre(TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
+            topocluster_distances = get_distances_to_barycentre(barycentre,TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis)
+            ET_distributions[i] = get_ET_distribution(distance_boundaries,topocluster_distances,TopoCluster_ETs)
+        else:
+            ET_distributions[i] = [0 for k in range(len(distance_boundaries))]
+
+    return ET_distributions
+
+def calculate_topo_barycentre(TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis):
+    barycentre = [0,0]
+    ET_total = sum(TopoCluster_ETs)
+    barycentre[0] = sum(x * m for x, m in zip(TopoCluster_etas, TopoCluster_ETs)) / ET_total
+    barycentre[1] = sum(y * m for y, m in zip(TopoCluster_phis, TopoCluster_ETs)) / ET_total
+    return barycentre
+
+def get_distances_to_barycentre(barycentre,TopoCluster_ETs,TopoCluster_etas,TopoCluster_phis):
+    topocluster_distances = [0 for i in range(len(TopoCluster_ETs))]
+    for i in range(len(TopoCluster_ETs)):
+        topocluster_distance = math.sqrt((TopoCluster_etas[i]-barycentre[0])**2+(TopoCluster_phis[i]-barycentre[1])**2)
+        topocluster_distances[i] = topocluster_distance
+    return topocluster_distances
+
+def get_ET_distribution(distance_boundaries,topocluster_distances,TopoCluster_ETs):
+    lower_boundry = 0
+    topocluster_ET_distribution = [0 for i in range(len(distance_boundaries))]
+    for i, upper_boundry in enumerate(distance_boundaries):
+        for j, topocluster_distance in enumerate(topocluster_distances):
+            if topocluster_distance > lower_boundry and topocluster_distance <= upper_boundry:
+                topocluster_ET_distribution[i] += TopoCluster_ETs[j]
+        lower_boundry = upper_boundry
+    return np.array(topocluster_ET_distribution)
+
+X_train, X_test, y_train, y_test, pd_passthrough_train, pd_passthrough_test = prepare_data()
+all_estimators_list = all_estimators(type_filter="classifier")
+
+binary_classifiers = {}
+default_base_estimator = LogisticRegression()
+
+for name, Classifier in all_estimators_list:
+    try:
+        # Handle meta-estimators requiring base estimators or parameters
+        if name in [
+            "ClassifierChain",
+            "FixedThresholdClassifier",
+            "MultiOutputClassifier",
+            "OneVsOneClassifier",
+            "OneVsRestClassifier",
+            "OutputCodeClassifier",
+            "StackingClassifier",
+            "TunedThresholdClassifierCV",
+            "VotingClassifier",
+        ]:
+            if "ClassifierChain" == name:
+                clf = Classifier(base_estimator=default_base_estimator)
+            elif name in [
+                "MultiOutputClassifier",
+                "OneVsOneClassifier",
+                "OneVsRestClassifier",
+                "OutputCodeClassifier",
+                "FixedThresholdClassifier",
+                "TunedThresholdClassifierCV",
+            ]:
+                clf = Classifier(estimator=default_base_estimator)
+            elif name == "StackingClassifier":
+                clf = Classifier(estimators=[("lr", LogisticRegression())])
+            elif name == "VotingClassifier":
+                clf = Classifier(estimators=[("lr", LogisticRegression())])
+        else:
+            # Instantiate directly for non-meta classifiers
+            clf = Classifier()
+
+        if hasattr(clf, "predict"):  # Check for predict method
+            binary_classifiers[name] = Classifier
+            globals()[name] = Classifier  # Dynamically add to global namespace
+    except Exception as e:
+        print(f"Could not import {name}: {e}")
+
+# Verify imported classifiers
+print(f"Imported {len(binary_classifiers)} binary classifiers:")
+print(list(binary_classifiers.keys()))
+
+
+all_estimators_list = all_estimators(type_filter="classifier")
+
+binary_classifiers = {}
+default_base_estimator = LogisticRegression()
+
+for name, Classifier in all_estimators_list:
+    try:
+        # Handle meta-estimators requiring base estimators or parameters
+        if name in [
+            "ClassifierChain",
+            "FixedThresholdClassifier",
+            "MultiOutputClassifier",
+            "OneVsOneClassifier",
+            "OneVsRestClassifier",
+            "OutputCodeClassifier",
+            "StackingClassifier",
+            "TunedThresholdClassifierCV",
+            "VotingClassifier",
+        ]:
+            if "ClassifierChain" == name:
+                clf = Classifier(base_estimator=default_base_estimator)
+            elif name in [
+                "MultiOutputClassifier",
+                "OneVsOneClassifier",
+                "OneVsRestClassifier",
+                "OutputCodeClassifier",
+                "FixedThresholdClassifier",
+                "TunedThresholdClassifierCV",
+            ]:
+                clf = Classifier(estimator=default_base_estimator)
+            elif name == "StackingClassifier":
+                clf = Classifier(estimators=[("lr", LogisticRegression())])
+            elif name == "VotingClassifier":
+                clf = Classifier(estimators=[("lr", LogisticRegression())])
+        else:
+            # Instantiate directly for non-meta classifiers
+            clf = Classifier()
+
+        if hasattr(clf, "predict"):  # Check for predict method
+            binary_classifiers[name] = Classifier
+            globals()[name] = Classifier  # Dynamically add to global namespace
+    except Exception as e:
+        print(f"Could not import {name}: {e}")
+
+# Verify imported classifiers
+print(f"Imported {len(binary_classifiers)} binary classifiers:")
+print(list(binary_classifiers.keys()))

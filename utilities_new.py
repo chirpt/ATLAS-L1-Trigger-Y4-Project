@@ -734,3 +734,90 @@ def plot_all_results(binary_classifier_names, description, data_subdir):
         if bins is not None and electrons_efficiency is not None:
             plot_efficiency_vs_ele_PT(bins, electrons_efficiency, classifier_name, description)
         
+def compare_2_classifiers(classifier1, desc1, id1, classifier2, desc2, id2, figsize=(5, 5)):
+    # Read ROC data
+    fpr1, tpr1, roc_auc1 = read_roc(classifier1, desc1, id1)
+    fpr2, tpr2, roc_auc2 = read_roc(classifier2, desc2, id2)
+    
+    plt.figure(figsize=figsize)
+    if fpr1 and tpr1:
+        plt.plot(fpr1, tpr1, color='blue', lw=2, label=f"{classifier1} {id1} (AUC = {roc_auc1:.4f})")
+    if fpr2 and tpr2:
+        plt.plot(fpr2, tpr2, color='red', lw=2, label=f"{classifier2} {id2} (AUC = {roc_auc2:.4f})")
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC Curve Comparison')
+    plt.legend()
+    plt.show()
+    
+    # Read Precision-Recall data
+    precision1, recall1, pr_auc1, chance1 = read_precision_recall(classifier1, desc1, id1)
+    precision2, recall2, pr_auc2, chance2 = read_precision_recall(classifier2, desc2, id2)
+    
+    plt.figure(figsize=figsize)
+    if precision1 and recall1:
+        plt.plot(recall1, precision1, color='blue', lw=2, label=f"{classifier1} {id1} (AUC = {pr_auc1:.4f})")
+    if precision2 and recall2:
+        plt.plot(recall2, precision2, color='red', lw=2, label=f"{classifier2} {id2} (AUC = {pr_auc2:.4f})")
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('Precision-Recall Curve Comparison')
+    plt.legend()
+    plt.show()
+    
+    # Read Efficiency vs Electron PT data
+    bins1, eff1 = read_efficiency_vs_ele_PT(classifier1, desc1, id1)
+    bins2, eff2 = read_efficiency_vs_ele_PT(classifier2, desc2, id2)
+    
+    plt.figure(figsize=figsize)
+    if bins1 and eff1:
+        plt.bar(bins1[:-1], eff1, width = np.diff(bins1), alpha=0.5, align='edge', edgecolor='black', label=f"{classifier1} {id1}")
+    if bins2 and eff2:
+        plt.bar(bins2[:-1], eff2, width = np.diff(bins2), alpha=0.5, align='edge', edgecolor='black', label=f"{classifier2} {id2}")
+    plt.xlabel('Electron $p_T$')
+    plt.ylabel('Efficiency')
+    plt.title('Efficiency vs Electron $p_T$ Comparison')
+    plt.legend()
+    plt.show()
+
+def compare_classifiers(classifiers, descriptions, ids, figsize=(5, 5)):
+    if not (len(classifiers) == len(descriptions) == len(ids)):
+        raise ValueError("All input lists must have the same length.")
+    
+    # Read and plot ROC data
+    plt.figure(figsize=figsize)
+    for classifier, desc, id_ in zip(classifiers, descriptions, ids):
+        fpr, tpr, roc_auc = read_roc(classifier, desc, id_)
+        if fpr and tpr:
+            plt.plot(fpr, tpr, lw=2, label=f"{classifier} {id_} (AUC = {roc_auc:.4f})")
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC Curve Comparison')
+    plt.legend()
+    plt.show()
+    
+    # Read and plot Precision-Recall data
+    plt.figure(figsize=figsize)
+    for classifier, desc, id_ in zip(classifiers, descriptions, ids):
+        precision, recall, pr_auc, _ = read_precision_recall(classifier, desc, id_)
+        if precision and recall:
+            plt.plot(recall, precision, lw=2, label=f"{classifier} {id_} (AUC = {pr_auc:.4f})")
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('Precision-Recall Curve Comparison')
+    plt.legend()
+    plt.show()
+    
+    # Read and plot Efficiency vs Electron PT data
+    plt.figure(figsize=figsize)
+    for classifier, desc, id_ in zip(classifiers, descriptions, ids):
+        bins, eff = read_efficiency_vs_ele_PT(classifier, desc, id_)
+        if bins and eff:
+            plt.bar(bins[:-1], eff, width=np.diff(bins), alpha=0.5, align='edge', edgecolor='black', label=f"{classifier} {id_}")
+    plt.xlabel('Electron $p_T$')
+    plt.ylabel('Efficiency')
+    plt.title('Efficiency vs Electron $p_T$ Comparison')
+    plt.legend()
+    plt.show()
