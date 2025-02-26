@@ -351,7 +351,6 @@ def train_with_timeout(clf, X_train, y_train, timeout=3):
         return False
     return True
 
-
 def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train, y_test, pd_passthrough_train, pd_passthrough_test, description, data_subdir):
     results = []
     log = load_log(data_subdir)
@@ -452,7 +451,6 @@ def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train,
 
     save_csv(description, results, data_subdir)
     return results
-
 
 def load_log(data_subdir):
     log_file = os.path.join(os.path.pardir, "data", data_subdir, "log.json")
