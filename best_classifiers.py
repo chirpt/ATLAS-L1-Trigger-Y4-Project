@@ -10,39 +10,51 @@ def process_csv(file_path):
         print(f"Skipping: {file_path} (either inside 'Results' directory or already processed)")
         return
 
-    # Load CSV file
     df = pd.read_csv(file_path)
 
-    df = df.dropna()
+    required_columns = ["TP", "TN", "FP", "FN", "MSE", "Accuracy", "Precision", "Recall", "F1"]
 
-    metrics = ["Accuracy", "Precision", "Recall", "F1", "MSE", "FP", "FN"]
-    for col in metrics:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df[required_columns] = df[required_columns].apply(pd.to_numeric, errors="coerce")
 
-    maximize = ["Accuracy", "Precision", "Recall", "F1"]  # Metrics to maximize
+    df = df[
+        (df["Precision"] > 0) &
+        (df["Recall"] > 0) &
+        (df["F1"] > 0)
+    ]
 
-    # Create cost matrix with flipped minimization metrics
-    cost_matrix = df[maximize].copy()
+    if df.empty:
+        print(f"Skipping {file_path}: No valid data after filtering missing or zero metrics.")
+        return
+
+    maximize = ["TP", "TN", "Accuracy", "Precision", "Recall", "F1"]
+    minimize = ["FP", "FN", "MSE"]
+
+    df[minimize] = -df[minimize]
+
+    cost_matrix = df[maximize + minimize].to_numpy()
 
 
-    def is_pareto_efficient(costs):
-        """Returns a boolean array indicating which points are Pareto optimal."""
-        num_points = costs.shape[0]
-        is_efficient = np.ones(num_points, dtype=bool)
-        for i in range(num_points):
-            if is_efficient[i]:
-                # Compare with all other points
-                is_efficient[i] = not np.any(np.all(costs > costs[i], axis=1))
-        return is_efficient
 
-    pareto_mask = is_pareto_efficient(cost_matrix.to_numpy())
-    pareto_df = df[pareto_mask]
+    # Compute Pareto-optimal classifiers
+    pareto_mask = is_pareto_efficient(cost_matrix)
+    pareto_df = df[pareto_mask].copy()
 
+    # Restore original values for minimization metrics
+    pareto_df[minimize] = -pareto_df[minimize]
+
+    # Sort based on Accuracy (or another key metric)
     pareto_df = pareto_df.sort_values(by="Accuracy", ascending=False)
 
-    top_classifiers = pareto_df.head(6)
+    # Ensure at least 6 results are returned
+    if len(pareto_df) < 7:
+        # Get additional classifiers to fill up to 6, sorted by Accuracy
+        remaining_df = df[~df.index.isin(pareto_df.index)].sort_values(by="Accuracy", ascending=False)
+        pareto_df = pd.concat([pareto_df, remaining_df.head(7 - len(pareto_df))])
 
-    print(f"\nTop Pareto-Optimal Classifiers for {file_path}:")
+    # Select top 6 classifiers
+    top_classifiers = pareto_df.head(7)
+
+    print(f"\nTop 6 Classifiers for {file_path}:")
     print(top_classifiers)
 
     # Define output file path
@@ -51,6 +63,14 @@ def process_csv(file_path):
     # Save results to CSV
     top_classifiers.to_csv(output_file, index=False)
     print(f"Saved results to: {output_file}")
+    
+def is_pareto_efficient(costs):
+    """Returns a boolean array indicating which points are Pareto optimal using NumPy broadcasting."""
+    is_efficient = np.ones(costs.shape[0], dtype=bool)
+    for i, c in enumerate(costs):
+        if is_efficient[i]:
+            is_efficient[i] = not np.any(np.all(costs > c, axis=1))  # Strict dominance check
+    return is_efficient
 
 # Set base directory correctly
 try:
