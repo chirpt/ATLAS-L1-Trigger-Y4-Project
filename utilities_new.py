@@ -172,8 +172,8 @@ def prepare_data(test_size=0.2, accept_data_filename="l1calo_hist_EGZ_extended.r
 
         accepted_labels = np.ones(DFs[0].shape[0])
         rejected_labels = np.zeros(DFs[1].shape[0])
-        accepted_df = pd.DataFrame({'offline_ele_pt': DFs[0]['offline_ele_pt'], 'EventNumber': DFs[0]['EventNumber'], 'Label': 1})
-        rejected_df = pd.DataFrame({'offline_ele_pt': DFs[1]['offline_ele_pt'], 'EventNumber': DFs[0]['EventNumber'], 'Label': 0})
+        accepted_df = pd.DataFrame({'offline_ele_pt': DFs[0]['offline_ele_pt'], 'EventNumber': DFs[0]['EventNumber'], 'TOB_ET': DFs[0]['TOB_ET'], 'Label': 1})
+        rejected_df = pd.DataFrame({'offline_ele_pt': DFs[1]['offline_ele_pt'], 'EventNumber': DFs[1]['EventNumber'], 'TOB_ET': DFs[1]['TOB_ET'], 'Label': 0})
 
         input_np = format_numpy_training_input(DFs, format_mode, distance_boundaries, rate_estimation)
         labels_np = np.concatenate((accepted_labels, rejected_labels), axis=0)
