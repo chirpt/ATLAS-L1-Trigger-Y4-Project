@@ -12,14 +12,14 @@ find . -type f -name "*.json" | while read file; do
     fi
 done
 
-find . -type f -name "*.csv" | while read file; do
-    dir=$(dirname "$file")
-    filename=$(basename "$file")
+    find . -type f -name "*.csv" | while read file; do
+        dir=$(dirname "$file")
+        filename=$(basename "$file")
 
-    newname=$(echo "$filename" | sed -E 's/(.*_)([A-Za-z]+_[0-9]{10,})(.*)_\2(.*)/\1\2\3\4/')
+        newname=$(echo "$filename" | sed -E 's/(.*_)([A-Za-z]+_[0-9]{6,})(.*)_\2(.*)/\1\2\3\4/')
 
-    if [ "$filename" != "$newname" ]; then
-        mv "$file" "$dir/$newname"
-        echo "Renamed: $file -> $dir/$newname"
-    fi
-done
+        if [ "$filename" != "$newname" ]; then
+            mv "$file" "$dir/$newname"
+            echo "Renamed: $file -> $dir/$newname"
+        fi
+    done
