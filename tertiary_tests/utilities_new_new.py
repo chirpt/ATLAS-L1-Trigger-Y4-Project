@@ -439,7 +439,8 @@ def train_evaluate_all_classifiers(binary_classifiers, X_train, X_test, y_train,
                         ZB_pd_passthrough_test["pred"] = ZB_y_pred
                         # print(ZB_pd_passthrough_test.columns)
                         event_accept_count = count_accepted(ZB_pd_passthrough_test)
-                        rate = (event_accept_count / 19426) * 293 # 293 is the rate in kHz 
+                        # rate = (event_accept_count / 19426) * 293 # 293 is the rate in kHz 
+                        rate = (event_accept_count / 7107) * 30.6 # 293 is the rate in kHz
                         print("rate:", rate),"KHz"
                     else:
                         rate = "NULL"
