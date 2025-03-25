@@ -40,3 +40,4 @@ tertiary_tests/data filter=lfs diff=lfs merge=lfs -text
 tertiary_tests/data/ filter=lfs diff=lfs merge=lfs -text
 tertiary_tests/data/* filter=lfs diff=lfs merge=lfs -text
 tertiary_tests/data/*.* filter=lfs diff=lfs merge=lfs -text
+*.root filter=lfs diff=lfs merge=lfs -text
